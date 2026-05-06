@@ -248,21 +248,27 @@ function ConnectInstagram({ businessId, business, onConnected }) {
 // ═════════════════════════════════════════════════════════════════════
 // Upload Photos
 // ═════════════════════════════════════════════════════════════════════
-
-function UploadPhotos({ businessId, business, onReady }) {
-  const [photos, setPhotos]   = useState([]);   // [{url, name}]
-  const [uploading, setUpl]   = useState(false);
-  const [toast, setToast]     = useState(null);
+function UploadMedia({ businessId, business, onReady }) {
+  const [media, setMedia] = useState([]); // [{url, name, type}]
+  const [uploading, setUpl] = useState(false);
+  const [toast, setToast] = useState(null);
 
   async function handleFile(file) {
-    if (photos.length >= 3) return;
+    if (media.length >= 3) return;
     setUpl(true);
     try {
       const fd = new FormData();
       fd.append("file", file);
       const res = await api.uploadMedia(businessId, fd);
-      setPhotos(p => [...p, { url: res.media_url, name: file.name }]);
-      if (res.ready) setToast({ msg: "All 3 photos uploaded! Socio will generate your posts tonight." });
+
+      // Store the file type to decide how to render the preview
+      setMedia(m => [...m, {
+        url: res.media_url,
+        name: file.name,
+        type: file.type
+      }]);
+
+      if (res.ready) setToast({ msg: "All 3 media uploaded! Socio will generate your posts tonight." });
     } catch(e) {
       setToast({ msg: e.message, type: "err" });
     } finally { setUpl(false); }
@@ -274,26 +280,32 @@ function UploadPhotos({ businessId, business, onReady }) {
       <div className="w-full max-w-sm">
         <div className="text-center mb-6">
           <Logo size={44} />
-          <h2 className="text-xl font-semibold text-gray-900 mt-4 mb-2">Upload 3 photos</h2>
+          <h2 className="text-xl font-semibold text-gray-900 mt-4 mb-2">Upload 3 media files</h2>
           <p className="text-sm text-gray-500 leading-relaxed">
-            Socio will write captions for your specific photos and schedule them for the best times based on your audience.
+            Socio will write captions for your photos and videos and schedule them for the best times.
           </p>
         </div>
 
-        {/* Upload slots */}
         <div className="space-y-3 mb-6">
           {[0, 1, 2].map(i => (
             <label key={i} className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition ${
-              photos[i]
+              media[i]
                 ? "border-[#1D9E75] bg-[#E1F5EE]"
                 : "border-dashed border-gray-300 bg-white hover:border-[#1D9E75]"
             }`}>
-              {photos[i] ? (
+              {media[i] ? (
                 <>
-                  <img src={photos[i].url} className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+                  {/* Conditional rendering for Photo vs Video preview */}
+                  {media[i].type.startsWith("video") ? (
+                    <video src={media[i].url} className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+                  ) : (
+                    <img src={media[i].url} className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+                  )}
                   <div>
-                    <div className="text-xs font-semibold text-[#085041]">Photo {i + 1} uploaded ✓</div>
-                    <div className="text-[11px] text-[#0F6E56] truncate max-w-[200px]">{photos[i].name}</div>
+                    <div className="text-xs font-semibold text-[#085041]">
+                      {media[i].type.startsWith("video") ? "Video" : "Photo"} {i + 1} uploaded ✓
+                    </div>
+                    <div className="text-[11px] text-[#0F6E56] truncate max-w-[200px]">{media[i].name}</div>
                   </div>
                 </>
               ) : (
@@ -303,39 +315,40 @@ function UploadPhotos({ businessId, business, onReady }) {
                   </div>
                   <div>
                     <div className="text-sm font-medium text-gray-700">
-                      {uploading && photos.length === i ? "Uploading…" : `Photo ${i + 1}`}
+                      {uploading && media.length === i ? "Uploading…" : `Media ${i + 1}`}
                     </div>
-                    <div className="text-xs text-gray-400">Tap to choose from your camera roll</div>
+                    <div className="text-xs text-gray-400">Tap to choose photo or video</div>
                   </div>
                 </>
               )}
               <input
-                type="file" accept="image/*" className="hidden"
-                disabled={!!photos[i] || uploading}
+                type="file"
+                accept="image/*,video/*" // Now accepts both
+                className="hidden"
+                disabled={!!media[i] || uploading}
                 onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
               />
             </label>
           ))}
         </div>
 
-        {photos.length === 3 ? (
+        {media.length === 3 ? (
           <button onClick={onReady} className="w-full bg-[#1D9E75] text-white py-3.5 rounded-xl font-semibold text-sm hover:opacity-90 transition">
             Done — go to dashboard →
           </button>
         ) : (
           <div className="text-center text-sm text-gray-400">
-            {3 - photos.length} more photo{3 - photos.length !== 1 ? "s" : ""} needed
+            {3 - media.length} more item{3 - media.length !== 1 ? "s" : ""} needed
           </div>
         )}
 
         <p className="text-[11px] text-gray-400 text-center mt-4 leading-relaxed">
-          Every Sunday you'll get a reminder to upload next week's photos. Socio generates posts at 8pm Sunday.
+          Socio generates posts at 8pm Sunday. You can mix and match photos and videos.
         </p>
       </div>
     </div>
   );
 }
-
 
 // ═════════════════════════════════════════════════════════════════════
 // SCREEN 3 · Posts tab
@@ -428,7 +441,7 @@ function PostsTab({ businessId, igPage, onUploadMore }) {
       {/* Actions bar */}
       <div className="flex gap-2 mb-5">
         <button onClick={handleButtonClick} disabled={uploadNewPhotos} className="flex-1 bg-[#1D9E75] text-white py-2.5 rounded-xl text-sm font-semibold hover:opacity-90 disabled:opacity-60 transition flex items-center justify-center gap-2">
-          {uploadNewPhotos ? <><span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> Upload Image</> : "Upload Image"}
+          {uploadNewPhotos ? <><span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> Upload Media</> : "Upload Image"}
         </button>
         <button onClick={generateImage} disabled={generatingImage} className="flex-1 bg-[#1D9E75] text-white py-2.5 rounded-xl text-sm font-semibold hover:opacity-90 disabled:opacity-60 transition flex items-center justify-center gap-2">
           {generatingImage ? <><span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> Generating…</> : "✦ Generate AI Image"}
@@ -843,7 +856,7 @@ export default function App() {
   }
 
   // ── After IG connected successfully ──────────────────────────────
-  function handleUploadPhotos() {
+  function handleUploadMedia() {
     // Reload business data then enter dashboard
     api.getBusiness(businessId).then(d => {
       setBusiness(d);
@@ -882,10 +895,10 @@ export default function App() {
   );
 
   if (appState === "upload_photos") return (
-    <UploadPhotos
+    <UploadMedia
       businessId={businessId}
       business={business}
-      onReady={handleUploadPhotos}
+      onReady={handleUploadMedia}
     />
   );
 
