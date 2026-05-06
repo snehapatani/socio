@@ -3,7 +3,9 @@ from pydantic import BaseModel, EmailStr
 from database import supabase
 from config import settings
 from typing import Optional, Annotated, Dict, Any
+import io
 import uuid
+from PIL import Image
 
 router = APIRouter()
 
@@ -98,18 +100,62 @@ def update_business(business_id: str, body: BusinessUpdate):
 
     result = supabase.table("businesses").update(updates).eq("id", business_id).execute()
 
+def process_image(contents: bytes) -> tuple[bytes, str]:
+    """Flattens, resizes, and converts image to JPEG for Meta compliance."""
+    img = Image.open(io.BytesIO(contents))
+
+    # 1. Handle Transparency (Alpha Channel) - Crucial for AI PNGs
+    if img.mode in ("RGBA", "P"):
+        background = Image.new("RGB", img.size, (255, 255, 255))
+        background.paste(img, mask=img.split()[3] if img.mode == "RGBA" else None)
+        img = background
+    else:
+        img = img.convert("RGB")
+
+    # 2. Standardize Width to 1080px (Meta's preferred width)
+    # This significantly reduces file size while maintaining quality
+    if img.width > 1080:
+        w_percent = (1080 / float(img.width))
+        h_size = int((float(img.height) * float(w_percent)))
+        img = img.resize((1080, h_size), Image.Resampling.LANCZOS)
+
+    # 3. Export as JPEG
+    buffer = io.BytesIO()
+    img.save(buffer, format="JPEG", quality=90, optimize=True)
+    return buffer.getvalue(), "image/jpeg"
 
 @router.post("/{business_id}/upload-media")
 async def upload_to_library(business_id: str, file: Annotated[UploadFile, File()]):
-    contents = await file.read()
-    ext      = (file.filename or "file").split(".")[-1].lower()
+    raw_contents = await file.read()
+    content_type = file.content_type or ""
+
+    # Identify the file type
+    is_image = content_type.startswith("image/")
+    is_video = content_type.startswith("video/")
+
+    if is_image:
+        # 1. Process images to ensure Meta compliance (JPG, <8MB, no alpha)
+        try:
+            processed_contents, final_mime = process_image(raw_contents)
+            ext = "jpg"
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Image processing failed: {str(e)}")
+    elif is_video:
+        # 2. Bypass Pillow for videos (Pillow cannot open videos)
+        processed_contents = raw_contents
+        final_mime = content_type
+        ext = (file.filename or "video.mp4").split(".")[-1].lower()
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported file type. Please upload an image or video.")
+
+    # Generate path and upload to Supabase
     media_id = str(uuid.uuid4())
-    path     = f"businesses/{business_id}/library/{media_id}.{ext}"
+    path = f"businesses/{business_id}/library/{media_id}.{ext}"
 
     supabase.storage.from_("media").upload(
         path=path,
-        file=contents,
-        file_options={"content-type": file.content_type or "image/jpeg"},
+        file=processed_contents,
+        file_options={"content-type": final_mime},
     )
 
     public_url = f"{settings.SUPABASE_URL}/storage/v1/object/public/media/{path}"
@@ -135,6 +181,7 @@ async def upload_to_library(business_id: str, file: Annotated[UploadFile, File()
         "unused_count":  len(unused.data or []),
         "ready":         len(unused.data or []) >= 3,
     }
+
 
 
 # GET media library — shows owner their photo bank
