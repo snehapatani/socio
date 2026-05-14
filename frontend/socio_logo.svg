@@ -1,0 +1,51 @@
+<svg width="100%" viewBox="0 0 680 546.83" role="img" style="" xmlns="http://www.w3.org/2000/svg">
+  <title style="fill:rgb(0, 0, 0);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">Socio logo — fixed</title>
+  <desc style="fill:rgb(0, 0, 0);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">Three variants of the Socio logo with corrected typography: light, dark, and app icon</desc>
+
+  
+
+  <!-- ── VARIANT 1: Light ── -->
+
+  <!-- Top square -->
+  <rect x="255" y="44" width="112" height="112" rx="22" stroke="#4C1D95" transform="rotate(45 311 100)" style="fill:none;stroke:rgb(76, 29, 149);color:rgb(255, 255, 255);stroke-width:18px;stroke-linecap:round;stroke-linejoin:round;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <!-- Bottom-left square -->
+  <rect x="197" y="110" width="112" height="112" rx="22" stroke="#7C3AED" transform="rotate(45 253 166)" style="fill:none;stroke:rgb(124, 58, 237);color:rgb(255, 255, 255);stroke-width:18px;stroke-linecap:round;stroke-linejoin:round;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <!-- Bottom-right square -->
+  <rect x="313" y="110" width="112" height="112" rx="22" stroke="#A78BFA" transform="rotate(45 369 166)" style="fill:none;stroke:rgb(167, 139, 250);color:rgb(255, 255, 255);stroke-width:18px;stroke-linecap:round;stroke-linejoin:round;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+  <!-- Wordmark: "soc" + dotless-i + "o" -->
+  <!-- Render without the i dot by using a custom glyph approach: print full word, mask the dot, redraw without -->
+  <!-- Simplest: just render "socio" normally — the font's own i dot is correct, no extra circle needed -->
+  <text x="340" y="292" text-anchor="middle" fill="#2E1065" style="fill:rgb(46, 16, 101);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:Sora, Inter, system-ui, sans-serif;font-size:64px;font-weight:700;text-anchor:middle;dominant-baseline:auto">socio</text>
+
+  <text x="340" y="318" text-anchor="middle" style="fill:rgb(170, 170, 170);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:system-ui, sans-serif;font-size:11px;font-weight:400;text-anchor:middle;dominant-baseline:auto">ON LIGHT</text>
+
+  <!-- ── VARIANT 2: Dark ── -->
+
+  <rect x="40" y="358" width="280" height="142" rx="12" fill="#1A0A3C" style="fill:rgb(26, 10, 60);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+  <!-- Top square -->
+  <rect x="95" y="370" width="80" height="80" rx="16" stroke="#EDE9FE" transform="rotate(45 135 410)" style="fill:none;stroke:rgb(237, 233, 254);color:rgb(255, 255, 255);stroke-width:18px;stroke-linecap:round;stroke-linejoin:round;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <!-- Bottom-left square -->
+  <rect x="63" y="408" width="80" height="80" rx="16" stroke="#C4B5FD" transform="rotate(45 103 448)" style="fill:none;stroke:rgb(196, 181, 253);color:rgb(255, 255, 255);stroke-width:18px;stroke-linecap:round;stroke-linejoin:round;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <!-- Bottom-right square -->
+  <rect x="127" y="408" width="80" height="80" rx="16" stroke="#A78BFA" transform="rotate(45 167 448)" style="fill:none;stroke:rgb(167, 139, 250);color:rgb(255, 255, 255);stroke-width:18px;stroke-linecap:round;stroke-linejoin:round;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+  <text x="225" y="446" text-anchor="middle" fill="#FFFFFF" font-size="44" style="fill:rgb(255, 255, 255);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:Sora, Inter, system-ui, sans-serif;font-size:64px;font-weight:700;text-anchor:middle;dominant-baseline:auto">socio</text>
+
+  <text x="180" y="516" text-anchor="middle" style="fill:rgb(170, 170, 170);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:system-ui, sans-serif;font-size:11px;font-weight:400;text-anchor:middle;dominant-baseline:auto">ON DARK</text>
+
+  <!-- ── VARIANT 3: App icon ── -->
+
+  <rect x="450" y="358" width="160" height="160" rx="32" fill="#6C47FF" style="fill:rgb(108, 71, 255);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+  <!-- Top square -->
+  <rect x="494" y="365" width="64" height="64" rx="13" stroke="#FFFFFF" stroke-width="10" transform="rotate(45 526 397)" style="fill:none;stroke:rgb(255, 255, 255);color:rgb(255, 255, 255);stroke-width:18px;stroke-linecap:round;stroke-linejoin:round;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <!-- Bottom-left square -->
+  <rect x="466" y="397" width="64" height="64" rx="13" stroke="rgba(255,255,255,0.6)" stroke-width="10" transform="rotate(45 498 429)" style="fill:none;stroke:rgba(255, 255, 255, 0.6);color:rgb(255, 255, 255);stroke-width:18px;stroke-linecap:round;stroke-linejoin:round;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <!-- Bottom-right square -->
+  <rect x="522" y="397" width="64" height="64" rx="13" stroke="rgba(255,255,255,0.6)" stroke-width="10" transform="rotate(45 554 429)" style="fill:none;stroke:rgba(255, 255, 255, 0.6);color:rgb(255, 255, 255);stroke-width:18px;stroke-linecap:round;stroke-linejoin:round;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+  <text x="530" y="534" text-anchor="middle" style="fill:rgb(170, 170, 170);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:system-ui, sans-serif;font-size:11px;font-weight:400;text-anchor:middle;dominant-baseline:auto">APP ICON</text>
+
+</svg>
