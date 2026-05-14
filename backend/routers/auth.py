@@ -1,133 +1,124 @@
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import RedirectResponse
+"""JWT verification + role-based access for FastAPI routes.
+
+Supabase issues HS256-signed JWTs. We verify them with the project's
+JWT secret (Supabase dashboard → Project Settings → API → JWT Secret),
+extract the user id (`sub`) and email, then optionally check role
+against the `profiles` table.
+"""
+
+from fastapi import Header, HTTPException, Depends
+from typing import Optional
+from jose import jwt, JWTError
+
 from config import settings
-from database import supabase, encrypt_token
-import requests, secrets
-from datetime import datetime, timedelta, timezone
+from db.client import supabase
+from functools import lru_cache
+import httpx
 
-router = APIRouter()
+# ── JWKS cache ───────────────────────────────────────────────────────
+@lru_cache(maxsize=1)
+def _jwks() -> dict:
+    """Fetch Supabase's public keys. Cached for the process lifetime.
 
-SCOPE = (
-    "instagram_basic,"
-    "instagram_content_publish,"
-    "instagram_manage_insights,"
-    "pages_show_list,"
-    "pages_read_engagement"
-)
-
-# ── Step 1: redirect to Facebook login ───────────────────────────────
-@router.get("/login")
-def login(business_id: str):
-    """Called when a business owner clicks 'Connect Instagram'."""
-    state = f"{business_id}:{secrets.token_urlsafe(16)}"
-    url = (
-        f"https://www.facebook.com/v21.0/dialog/oauth"
-        f"?client_id={settings.FB_APP_ID}"
-        f"&redirect_uri={settings.FB_REDIRECT_URI}"
-        f"&scope={SCOPE}"
-        f"&response_type=code"
-        f"&state={state}"
-    )
-    return RedirectResponse(url)
+    If you rotate JWT keys in production, restart the server (or wrap
+    this with a TTL cache instead).
+    """
+    url = f"{settings.SUPABASE_URL}/auth/v1/.well-known/jwks.json"
+    resp = httpx.get(url, timeout=5.0)
+    resp.raise_for_status()
+    return resp.json()
 
 
-# ── Step 2: handle callback ───────────────────────────────────────────
-@router.get("/callback")
-def callback(code: str = None, state: str = None, error: str = None):
-    if error or not code:
-        return RedirectResponse(f"{settings.FRONTEND_URL}/connect?error=denied")
+def _find_key(kid: str) -> dict:
+    for key in _jwks().get("keys", []):
+        if key.get("kid") == kid:
+            return key
+    raise JWTError(f"No JWKS key found for kid={kid}")
 
-    # Parse state to get business_id
+# ── Extract & verify ─────────────────────────────────────────────────
+def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Missing or invalid Authorization header.")
+    token = authorization.split(" ", 1)[1]
+
     try:
-        business_id = state.split(":")[0]
-    except Exception:
-        raise HTTPException(400, "Invalid state")
+        header = jwt.get_unverified_header(token)
+        alg    = header.get("alg")
 
-    # A: exchange code → short-lived token
-    r = requests.get(
-        "https://graph.facebook.com/v21.0/oauth/access_token",
-        params={
-            "client_id":     settings.FB_APP_ID,
-            "client_secret": settings.FB_APP_SECRET,
-            "redirect_uri":  settings.FB_REDIRECT_URI,
-            "code":          code,
-        },
-        timeout=10,
+        if alg == "HS256":
+            # Legacy symmetric secret
+            payload = jwt.decode(
+                token,
+                settings.SUPABASE_JWT_SECRET,
+                algorithms=["HS256"],
+                options={"verify_aud": False},   # Supabase aud is 'authenticated'
+            )
+        else:
+            # Asymmetric (ES256 / RS256) — verify against JWKS public key
+            key = _find_key(header.get("kid"))
+            payload = jwt.decode(
+                token,
+                key,
+                algorithms=[alg],
+                options={"verify_aud": False},
+            )
+    except JWTError as e:
+        raise HTTPException(401, f"Invalid token: {e}")
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(401, "Token missing 'sub' claim.")
+
+    return {"id": user_id, "email": payload.get("email"), "raw": payload}
+
+
+# ── Admin role guard ────────────────────────────────────────────────
+def require_admin(user: dict = Depends(get_current_user)) -> dict:
+    """Verify the user has profiles.role = 'admin'.
+
+    Costs one extra query per admin request. If you call admin routes
+    in tight loops, cache the role in a request-scoped cache or move
+    role into Supabase Auth app_metadata so it's signed into the JWT.
+    """
+    res = (
+        supabase.table("profiles")
+        .select("role")
+        .eq("id", user["id"])
+        .single()
+        .execute()
     )
-    data = r.json()
-    if "error" in data:
-        return RedirectResponse(f"{settings.FRONTEND_URL}/connect?error=token_exchange")
-    short_token = data["access_token"]
+    if not res.data:
+        raise HTTPException(403, "Profile not found.")
+    if res.data.get("role") != "admin":
+        raise HTTPException(403, "Admin access required.")
+    return user
 
-    # B: upgrade → long-lived token (60 days)
-    r2 = requests.get(
-        "https://graph.facebook.com/v21.0/oauth/access_token",
-        params={
-            "grant_type":        "fb_exchange_token",
-            "client_id":         settings.FB_APP_ID,
-            "client_secret":     settings.FB_APP_SECRET,
-            "fb_exchange_token": short_token,
-        },
-        timeout=10,
+
+# ── Owner-or-admin guard (for business-scoped routes) ───────────────
+def require_owner_or_admin(business_id: str, user: dict = Depends(get_current_user)) -> dict:
+    """Allow if user owns the business OR is an admin."""
+    biz = (
+        supabase.table("businesses")
+        .select("owner_id")
+        .eq("id", business_id)
+        .single()
+        .execute()
     )
-    long_data = r2.json()
-    long_token = long_data["access_token"]
-    expires_in = long_data.get("expires_in", 5183944)  # ~60 days default
-    expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+    if not biz.data:
+        raise HTTPException(404, "Business not found.")
 
-    # C: get Facebook Pages the user manages
-    pages_r = requests.get(
-        "https://graph.facebook.com/v21.0/me/accounts",
-        params={"access_token": long_token, "fields": "id,name,access_token"},
-        timeout=10,
+    if biz.data.get("owner_id") == user["id"]:
+        return user
+
+    # Fall back to admin check
+    profile = (
+        supabase.table("profiles")
+        .select("role")
+        .eq("id", user["id"])
+        .single()
+        .execute()
     )
-    pages = pages_r.json().get("data", [])
-    if not pages:
-        return RedirectResponse(f"{settings.FRONTEND_URL}/connect?error=no_pages")
+    if profile.data and profile.data.get("role") == "admin":
+        return user
 
-    page = pages[0]
-    page_id    = page["id"]
-    page_token = page["access_token"]
-
-    # D: get the Instagram Business Account linked to this Page
-    ig_r = requests.get(
-        f"https://graph.facebook.com/v21.0/{page_id}",
-        params={
-            "fields":       "instagram_business_account",
-            "access_token": page_token,
-        },
-        timeout=10,
-    )
-    ig_data = ig_r.json()
-    ig_account = ig_data.get("instagram_business_account")
-    if not ig_account:
-        return RedirectResponse(f"{settings.FRONTEND_URL}/connect?error=no_ig_account")
-
-    ig_user_id = ig_account["id"]
-
-    # E: fetch IG profile details
-    profile_r = requests.get(
-        f"https://graph.facebook.com/v21.0/{ig_user_id}",
-        params={
-            "fields":       "username,followers_count,profile_picture_url",
-            "access_token": long_token,
-        },
-        timeout=10,
-    )
-    profile = profile_r.json()
-
-    # F: upsert into instagram_pages
-    supabase.table("instagram_pages").upsert({
-        "business_id":          business_id,
-        "ig_user_id":           ig_user_id,
-        "ig_username":          profile.get("username"),
-        "fb_page_id":           page_id,
-        "fb_page_name":         page.get("name"),
-        "access_token":         encrypt_token(long_token),
-        "token_expires_at":     expires_at.isoformat(),
-        "followers_count":      profile.get("followers_count", 0),
-        "profile_picture_url":  profile.get("profile_picture_url"),
-        "is_active":            True,
-    }, on_conflict="ig_user_id").execute()
-
-    return RedirectResponse(f"{settings.FRONTEND_URL}/?connected=true")
+    raise HTTPException(403, "Not authorized for this business.")

@@ -1,20 +1,19 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File
-from pydantic import BaseModel, EmailStr
-from database import supabase
-from config import settings
-from typing import Optional, Annotated, Dict, Any
-import io
-import uuid
-from PIL import Image
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
+from postgrest.exceptions import APIError
+from typing import Optional
+
+from db.client import supabase
+from db.errors import handle_pg_error
+from routers.auth import get_current_user, require_owner_or_admin
 
 router = APIRouter()
 
 
 class BusinessCreate(BaseModel):
     name: str
-    business_type: str          # restaurant, salon, gym, etc.
-    owner_email: str
-    brand_tone: Optional[str] = "warm_friendly"   # renamed from tone
+    business_type: str
+    brand_tone: Optional[str] = "warm_friendly"
     business_context: Optional[dict] = None
 
 
@@ -24,59 +23,83 @@ class BusinessUpdate(BaseModel):
     brand_tone: Optional[str] = None
     business_context: Optional[dict] = None
 
-# ── Create business (onboarding step 1) ──────────────────────────────
+
+# ── Current user's business ──────────────────────────────────────────
+@router.get("/me")
+def get_my_business(user: dict = Depends(get_current_user)):
+    biz = (
+        supabase.table("businesses")
+        .select("*")
+        .eq("owner_id", user["id"])
+        .maybe_single()
+        .execute()
+    )
+    if not biz or not biz.data:
+        return None  # frontend treats this as "no business yet → onboarding"
+
+    ig = (
+        supabase.table("instagram_pages")
+        .select("*")
+        .eq("business_id", biz.data["id"])
+        .maybe_single()
+        .execute()
+    )
+    return {**biz.data, "instagram_page": ig.data if ig else None}
+
+
+# ── Create business (onboarding) ─────────────────────────────────────
 @router.post("/")
-def create_business(body: BusinessCreate):
-    result = supabase.table("businesses").insert({
-        "name":             body.name,
-        "owner_email":      body.owner_email,
-        "business_type":    body.business_type,
-        "brand_tone":       body.brand_tone,
-        "business_context": body.business_context or {},
-    }).execute()
+def create_business(body: BusinessCreate, user: dict = Depends(get_current_user)):
+    try:
+        result = supabase.table("businesses").insert({
+            "name":             body.name,
+            "owner_email":      user["email"],
+            "owner_id":         user["id"],
+            "business_type":    body.business_type,
+            "brand_tone":       body.brand_tone,
+            "business_context": body.business_context or {},
+        }).execute()
+    except APIError as e:
+        handle_pg_error(
+            e,
+            on_conflict="You already have a business — sign in instead.",
+            on_conflict_fields={
+                "owner_email": "An account with this email already exists. Try signing in.",
+                "owner_id":    "You already have a business — sign in instead.",
+            },
+        )
 
     if not result.data:
         raise HTTPException(500, "Failed to create business")
     return result.data[0]
 
 
-# ── Upload brand photo → Supabase Storage ────────────────────────────
-@router.post("/{business_id}/upload")
-async def upload_media(business_id: str, file: UploadFile = File(...)):
-    contents = await file.read()
-    ext       = file.filename.split(".")[-1].lower()
-    post_id   = str(uuid.uuid4())
-    path      = f"businesses/{business_id}/posts/{post_id}.{ext}"
-
-    supabase.storage.from_("media").upload(
-        path=path,
-        file=contents,
-        file_options={"content-type": file.content_type},
-    )
-
-    # Build the permanent public URL
-    public_url = f"{settings.SUPABASE_URL}/storage/v1/object/public/media/{path}"
-    return {"media_url": public_url, "media_storage_path": path, "post_id": post_id}
-
-
-# ── Get business + linked IG page ────────────────────────────────────
+# ── Get business + IG page (owner or admin) ─────────────────────────
 @router.get("/{business_id}")
-def get_business(business_id: str):
-    biz = supabase.table("businesses").select("*").eq("id", business_id).single().execute()
+def get_business(business_id: str, _: dict = Depends(require_owner_or_admin)):
+    biz = (
+        supabase.table("businesses")
+        .select("*")
+        .eq("id", business_id)
+        .single()
+        .execute()
+    )
     if not biz.data:
         raise HTTPException(404, "Business not found")
 
-    ig = supabase.table("instagram_pages").select(
-        "id, ig_username, ig_user_id, followers_count, profile_picture_url, is_active, token_expires_at"
-    ).eq("business_id", business_id).maybe_single().execute()
-
+    ig = (
+        supabase.table("instagram_pages")
+        .select("id, ig_username, ig_user_id, followers_count, profile_picture_url, is_active, token_expires_at")
+        .eq("business_id", business_id)
+        .maybe_single()
+        .execute()
+    )
     return {**biz.data, "instagram_page": ig.data if ig else None}
 
 
-# ── Update brand context ──────────────────────────────────────────────
+# ── Update business (owner or admin) ────────────────────────────────
 @router.patch("/{business_id}")
-def update_business(business_id: str, body: BusinessUpdate):
-    # Fetch existing JSONB first so we can merge, not overwrite
+def update_business(business_id: str, body: BusinessUpdate, _: dict = Depends(require_owner_or_admin)):
     existing = (
         supabase.table("businesses")
         .select("business_context")
@@ -88,9 +111,9 @@ def update_business(business_id: str, body: BusinessUpdate):
         raise HTTPException(404, "Business not found")
 
     updates = {}
-    if body.name          is not None: updates["name"]          = body.name
-    if body.business_type is not None: updates["business_type"] = body.business_type
-    if body.brand_tone    is not None: updates["brand_tone"]    = body.brand_tone
+    if body.name             is not None: updates["name"]          = body.name
+    if body.business_type    is not None: updates["business_type"] = body.business_type
+    if body.brand_tone       is not None: updates["brand_tone"]    = body.brand_tone
     if body.business_context is not None:
         merged = {**(existing.data.get("business_context") or {}), **body.business_context}
         updates["business_context"] = merged
@@ -98,107 +121,16 @@ def update_business(business_id: str, body: BusinessUpdate):
     if not updates:
         return existing.data
 
-    result = supabase.table("businesses").update(updates).eq("id", business_id).execute()
+    try:
+        result = (
+            supabase.table("businesses")
+            .update(updates)
+            .eq("id", business_id)
+            .execute()
+        )
+    except APIError as e:
+        handle_pg_error(e, on_conflict="That update conflicts with existing data.")
 
-def process_image(contents: bytes) -> tuple[bytes, str]:
-    """Flattens, resizes, and converts image to JPEG for Meta compliance."""
-    img = Image.open(io.BytesIO(contents))
-
-    # 1. Handle Transparency (Alpha Channel) - Crucial for AI PNGs
-    if img.mode in ("RGBA", "P"):
-        background = Image.new("RGB", img.size, (255, 255, 255))
-        background.paste(img, mask=img.split()[3] if img.mode == "RGBA" else None)
-        img = background
-    else:
-        img = img.convert("RGB")
-
-    # 2. Standardize Width to 1080px (Meta's preferred width)
-    # This significantly reduces file size while maintaining quality
-    if img.width > 1080:
-        w_percent = (1080 / float(img.width))
-        h_size = int((float(img.height) * float(w_percent)))
-        img = img.resize((1080, h_size), Image.Resampling.LANCZOS)
-
-    # 3. Export as JPEG
-    buffer = io.BytesIO()
-    img.save(buffer, format="JPEG", quality=90, optimize=True)
-    return buffer.getvalue(), "image/jpeg"
-
-@router.post("/{business_id}/upload-media")
-async def upload_to_library(business_id: str, file: Annotated[UploadFile, File()]):
-    raw_contents = await file.read()
-    content_type = file.content_type or ""
-
-    # Identify the file type
-    is_image = content_type.startswith("image/")
-    is_video = content_type.startswith("video/")
-
-    if is_image:
-        # 1. Process images to ensure Meta compliance (JPG, <8MB, no alpha)
-        try:
-            processed_contents, final_mime = process_image(raw_contents)
-            ext = "jpg"
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Image processing failed: {str(e)}")
-    elif is_video:
-        # 2. Bypass Pillow for videos (Pillow cannot open videos)
-        processed_contents = raw_contents
-        final_mime = content_type
-        ext = (file.filename or "video.mp4").split(".")[-1].lower()
-    else:
-        raise HTTPException(status_code=400, detail="Unsupported file type. Please upload an image or video.")
-
-    # Generate path and upload to Supabase
-    media_id = str(uuid.uuid4())
-    path = f"businesses/{business_id}/library/{media_id}.{ext}"
-
-    supabase.storage.from_("media").upload(
-        path=path,
-        file=processed_contents,
-        file_options={"content-type": final_mime},
-    )
-
-    public_url = f"{settings.SUPABASE_URL}/storage/v1/object/public/media/{path}"
-
-    row = supabase.table("media_library").insert({
-        "business_id":  business_id,
-        "media_url":    public_url,
-        "storage_path": path,
-        "times_used":   0,
-        "is_active":    True,
-        "content_type": file.content_type
-    }).execute()
-
-    # Count total unused photos available for next generation
-    unused = supabase.table("media_library").select("id").eq(
-        "business_id", business_id
-    ).eq("is_active", True).eq("times_used", 0).execute()
-
-    return {
-        "media_url":     public_url,
-        "storage_path":  path,
-        "id":            row.data[0]["id"],
-        "unused_count":  len(unused.data or []),
-        "ready":         len(unused.data or []) >= 3,
-    }
-
-
-
-# GET media library — shows owner their photo bank
-@router.get("/{business_id}/media-library")
-def get_media_library(business_id: str):
-    result = supabase.table("media_library").select(
-        "id, media_url, times_used, last_used_at, created_at", "content_type"
-    ).eq("business_id", business_id).eq(
-        "is_active", True
-    ).order("created_at", desc=True).execute()
-
-    photos = result.data or []
-    unused = [p for p in photos if p["times_used"] == 0]
-
-    return {
-        "photos":       photos,
-        "total":        len(photos),
-        "unused_count": len(unused),
-        "ready":        len(unused) >= 3,
-    }
+    if not result.data:
+        raise HTTPException(500, "Failed to update business")
+    return result.data[0]

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
-from database import supabase
+from db.client import supabase
 from config import settings
 import secrets, resend
 from datetime import datetime, timedelta, timezone

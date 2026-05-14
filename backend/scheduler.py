@@ -55,7 +55,7 @@ def job_refresh_tokens():
 
 
 def start_scheduler():
-    scheduler = BackgroundScheduler(timezone="UTC")
+    scheduler = BackgroundScheduler(timezone=settings.TZ)
 
     # Generate posts every Sunday at 20:00 UTC
     scheduler.add_job(job_generate_all, CronTrigger(day_of_week="sun", hour=20, minute=0))
@@ -67,7 +67,7 @@ def start_scheduler():
     scheduler.add_job(job_refresh_tokens, CronTrigger(hour=3, minute=0))
 
     # Photo reminder: Sunday 10:00 UTC (10 hours before generation)
-    scheduler.add_job(job_photo_reminder, CronTrigger(day_of_week="sun", hour=10, minute=0))
+    scheduler.add_job(job_photo_reminder, CronTrigger(day_of_week="mon", hour=13, minute=7))
 
     scheduler.start()
     log.info("Scheduler started — 3 jobs running")
@@ -90,9 +90,9 @@ def job_photo_reminder():
         bid = page["business_id"]
         try:
             # Check how many unused photos they have
-            pending = supabase.table("pending_media").select("id").eq(
+            pending = supabase.table("media_library").select("id").eq(
                 "business_id", bid
-            ).eq("used", False).execute()
+            ).eq("times_used", 0).execute()
 
             count = len(pending.data or [])
             if count >= 3:
@@ -155,8 +155,10 @@ def job_photo_reminder():
             </div>"""
 
             resend_client.Emails.send({
-                "from":    "Socio <hello@socio.app>",
-                "to":      [email],
+                # "from":    "Socio <hello@socio.app>",
+                # "to":      [email],
+                "from":    "onboarding@resend.dev",
+                "to":      "snehapatani@gmail.com",
                 "subject": f"📷 Upload {needed} photo{'s' if needed > 1 else ''} — Socio generates posts tonight",
                 "html":    html,
             })

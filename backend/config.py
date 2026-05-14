@@ -1,7 +1,8 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     # Supabase
     SUPABASE_URL: str
     SUPABASE_SERVICE_KEY: str          # service role key — backend only
@@ -27,7 +28,8 @@ class Settings(BaseSettings):
     # Encryption key for access tokens (32 bytes base64)
     TOKEN_ENCRYPTION_KEY: str
 
-    class Config:
-        env_file = ".env"
+    TZ: str
+
+    SUPABASE_JWT_SECRET: str
 
 settings = Settings()

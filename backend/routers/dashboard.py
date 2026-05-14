@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from database import supabase
+from db.client import supabase
 from datetime import datetime, timedelta, timezone
 
 router = APIRouter()
@@ -20,9 +20,18 @@ def get_dashboard(business_id: str):
     ).eq("business_id", business_id).maybe_single().execute()
 
     # Posts this week
-    posts_this_week = supabase.table("posts").select("id, status, scheduled_at, caption, ig_permalink").eq(
-        "business_id", business_id
-    ).gte("scheduled_at", week_ago).lte("scheduled_at", week_from).order("scheduled_at").execute()
+    # posts_this_week = supabase.table("posts").select("id, status, scheduled_at, caption, ig_permalink").eq(
+    #     "business_id", business_id
+    # ).gte("scheduled_at", week_ago).lte("scheduled_at", week_from).order("scheduled_at").execute()
+
+    posts_this_week = (
+        supabase.table("posts")
+        .select("id, status, scheduled_at, caption, ig_permalink")
+        .eq("business_id", business_id)
+        .gte("scheduled_at", week_ago)
+        .order("scheduled_at")
+        .execute()
+    )
 
     # Status counts
     all_posts = supabase.table("posts").select("status").eq("business_id", business_id).execute()

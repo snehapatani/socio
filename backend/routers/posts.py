@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from database import supabase, decrypt_token
+from db.client import supabase
+from core.security import decrypt_token
 from config import settings
 from typing import Optional
 import time
@@ -298,9 +299,9 @@ Format:
             "caption":            post["caption"],
             "hashtags":           post.get("hashtags", []),
             "media_type":         mediaType,
-            "media_url":          mediaPost["media_url"],       # already set from upload
-            "media_storage_path": mediaPost["storage_path"],
-            "status":             "pending",
+            "media_urls":          [mediaPost["media_url"]],       # already set from upload
+            "media_storage_paths": [mediaPost["storage_path"]],
+            "status":             "pending_approval",
             "scheduled_at":       schedule[i].isoformat(),
         }).execute()
         inserted.append(row.data[0])
@@ -440,6 +441,49 @@ def list_posts(business_id: str, status: Optional[str] = None):
     return result.data
 
 
+def create_ig_container(post_id, ig_id, token, url, caption=None, media_type="IMAGE", is_carousel_item=False):
+    params = {
+        "access_token": token,
+        "is_carousel_item": "true" if is_carousel_item else "false"
+    }
+
+    # Handle Video vs Image
+    if media_type == "VIDEO":
+        params["video_url"] = url
+        params["media_type"] = "REELS"
+    else:
+        params["image_url"] = url
+
+    if caption and not is_carousel_item:
+        params["caption"] = caption
+
+
+    res = requests.post(f"https://graph.facebook.com/v21.0/{ig_id}/media",
+                        params=params,
+                        timeout=30,
+                        )
+
+    container = res.json()
+    if "error" in container:
+        supabase.table("posts").update({
+            "status": "failed",
+            "error_message": json.dumps(container["error"]),
+        }).eq("id", post_id).execute()
+        raise HTTPException(502, f"Meta container error: {container['error']}")
+
+    return container["id"]
+
+def create_carousel_parent_container(ig_id, token, item_ids, caption):
+    params = {
+        "access_token": token,
+        "media_type": "CAROUSEL",
+        "children": ",".join(item_ids), # Comma-separated list of child container IDs
+        "caption": caption
+    }
+    res = requests.post(f"https://graph.facebook.com/v21.0/{ig_id}/media", params=params)
+    data = res.json()
+    return data["id"]
+
 # ── Publish a single post NOW (called by scheduler) ───────────────────
 @router.post("/{post_id}/publish")
 def publish_post(post_id: str):
@@ -452,40 +496,40 @@ def publish_post(post_id: str):
     ig = p["instagram_pages"]
     media_type = p.get("media_type", "image") # Default to image if not set
 
-    if not p.get("media_url"):
-        raise HTTPException(400, "Post has no media_url — upload an image first")
+    urls = p.get("media_urls", [])
+
+    if not urls:
+        raise HTTPException(400, "Post has no media_urls — upload media first")
 
     access_token = decrypt_token(ig["access_token"])
     ig_user_id   = ig["ig_user_id"]
     caption      = p["caption"] + "\n\n" + " ".join(f"#{h}" for h in (p.get("hashtags") or []))
+    try:
+        # --- CASE A: SINGLE IMAGE/VIDEO ---
+        if len(urls) == 1:
+            media_url = urls[0]
+            # Step 1: Create Media Container
+            container_id = create_ig_container(post_id, ig_user_id, access_token, media_url, caption, p.get("media_type")
+            )
 
-    container_params = {
-        "caption": caption,
-        "access_token": access_token,
-    }
+        # --- CASE B: CAROUSEL (Multi-item) ---
+        else:
+            # Step 1: Create item containers for each URL
+            item_ids = []
+            for url in urls:
+                # Carousel items don't have captions
+                item_id = create_ig_container(post_id, ig_user_id, access_token, url, is_carousel_item=True)
+                item_ids.append(item_id)
 
-    if media_type == "VIDEO":
-        container_params["media_type"] = "REELS"
-        container_params["video_url"] = p["media_url"]
-    else:
-        container_params["image_url"] = p["media_url"]
+            # Step 2: Create Parent Carousel Container
+            container_id = create_carousel_parent_container(
+                ig_user_id, access_token, item_ids, p.get("caption")
+            )
+    except Exception as e:
+        supabase.table("posts").update({"error_message": str(e), "status": "failed"}).eq("id", post_id).execute()
+        raise HTTPException(500, f"Instagram Publishing Error: {str(e)}")
 
-    # Step 1: create media container
-    container_r = requests.post(
-        f"https://graph.facebook.com/v21.0/{ig_user_id}/media",
-        params=container_params,
-        timeout=30,
-    )
 
-    container = container_r.json()
-    if "error" in container:
-        supabase.table("posts").update({
-            "status": "failed",
-            "error_message": json.dumps(container["error"]),
-        }).eq("id", post_id).execute()
-        raise HTTPException(502, f"Meta container error: {container['error']}")
-
-    container_id = container["id"]
 
     max_retries = 15 if media_type == "video" else 5
     is_ready = False
