@@ -34,8 +34,6 @@ export default function App() {
   const [igPage,     setIgPage]     = useState(null);
   const [appState,   setAppState]   = useState("loading");
 
-
-  console.log({ session, appState });
   // ── Track auth state ─────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
@@ -74,7 +72,6 @@ export default function App() {
     // Have a session → fetch profile + business
     (async () => {
       try {
-        console.log("==========Session User ID-----------" + session.user.id)
         const prof = await getProfile(session.user.id);
         setProfile(prof);
 

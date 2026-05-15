@@ -51,6 +51,7 @@ export const api = {
   mediaLibrary:    (id)              => req(`/businesses/${id}/media-library`),
   getPendingMedia: (id)              => req(`/businesses/${id}/pending-media`),
   uploadPending:   (id, formData)    => req(`/businesses/${id}/upload-pending`,  { method: "POST", body: formData }),
+  deleteMedia: (businessId, mediaId) =>  req(`/businesses/${businessId}/media-library/${mediaId}`, { method: "DELETE" }),
 
   // Posts
   generatePosts:   (businessId)      => req(`/posts/generate/${businessId}`,     { method: "POST" }),
@@ -73,6 +74,9 @@ export const api = {
   adminGetBusiness:     (id)         => req(`/admin/businesses/${id}`),
   adminUpdateBusiness:  (id, data)   => req(`/admin/businesses/${id}`,           { method: "PATCH", body: JSON.stringify(data) }),
   adminSuspendBusiness: (id)         => req(`/admin/businesses/${id}/suspend`,   { method: "POST" }),
+  adminDeleteBusiness:  (id) => req(`/admin/businesses/${id}`,         { method: "DELETE" }),
+  adminRestoreBusiness: (id) => req(`/admin/businesses/${id}/restore`, { method: "POST" }),
+  adminPurgeBusiness:   (id) => req(`/admin/businesses/${id}/purge`,   { method: "DELETE" }),
 };
 
 // ── Instagram OAuth connect URL ─────────────────────────────────────

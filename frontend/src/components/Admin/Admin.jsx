@@ -255,6 +255,39 @@ async function suspend() {
   finally { setBusy(false); }
 }
 
+async function softDelete() {
+    const ok = await confirm({
+      title:        "Delete this business?",
+      message:      `${b.name} will be hidden from all views. Data is preserved and can be restored.`,
+      variant:      "danger",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
+    await api.adminDeleteBusiness(b.id);
+    onChange();
+  }
+
+  async function purge() {
+    const first = await confirm({
+      title:        "Permanently delete?",
+      message:      `This removes ${b.name} and ALL their posts, media, and history forever. This cannot be undone.`,
+      variant:      "danger",
+      confirmLabel: "Continue",
+    });
+    if (!first) return;
+
+    const second = await confirm({
+      title:        "Are you absolutely sure?",
+      message:      `Type-confirmation isn't shown here — last chance to cancel.`,
+      variant:      "danger",
+      confirmLabel: "Yes, purge it",
+    });
+    if (!second) return;
+
+    await api.adminPurgeBusiness(b.id);
+    onChange();
+  }
+
 return (
     <div className="grid grid-cols-1 md:grid-cols-12 gap-3 px-4 py-3 border-b border-[#EDE9FE] last:border-0 hover:bg-[#FAFAFF] transition items-center text-xs">
       <div className="md:col-span-3 min-w-0">
@@ -303,6 +336,13 @@ return (
           >
             Suspend
           </button>
+        )}
+        {!b.deleted_at && (
+          <button onClick={softDelete} className="text-[10px] font-bold text-rose-600  hover:bg-rose-50  px-2 py-1 rounded transition">Delete</button>
+        )}
+        {/* Only render Purge in dev — backend will reject in prod, but no point showing it */}
+        {import.meta.env.DEV && (
+          <button onClick={purge}      className="text-[10px] font-bold text-rose-800  hover:bg-rose-100 px-2 py-1 rounded transition">Purge</button>
         )}
       </div>
     </div>

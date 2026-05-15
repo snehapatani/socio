@@ -5,6 +5,7 @@ import { getConnectUrl } from "../../lib/api.js";
 import Logo         from "../Common/Logo";
 import DashboardTab from "./DashboardTab";
 import PostsTab     from "./PostsTab";
+import LibraryTab from "./LibraryTab";
 import SettingsTab  from "./SettingsTab";
 import { useConfirm } from "../Common/Modal";
 
@@ -30,6 +31,13 @@ const TABS = [
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke={on ? "#6C47FF" : "#A78BFA"} strokeWidth="1.5">
       <rect x="2" y="2" width="16" height="16" rx="2.5"/>
       <path d="M5 7h10M5 10.5h7M5 14h5" strokeLinecap="round"/>
+    </svg>
+  )},
+  { id: "library", label: "Library", icon: (on) => (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke={on ? "#6C47FF" : "#A78BFA"} strokeWidth="1.5">
+      <rect x="2" y="2" width="16" height="16" rx="2.5"/>
+      <circle cx="7" cy="7" r="1.5" fill="currentColor" stroke="none"/>
+      <polyline points="18 13 13 8 4 17" strokeLinejoin="round"/>
     </svg>
   )},
   { id: "settings", label: "Settings", icon: (on) => (
@@ -154,6 +162,7 @@ export default function Dashboard({ businessId, business, igPage, onUploadMore }
       <div className="flex-1 overflow-y-auto">
         {tab === "dashboard" && <DashboardTab businessId={businessId} />}
         {tab === "posts"     && <PostsTab businessId={businessId} igPage={igPage} onUploadMore={onUploadMore} />}
+        {tab === "library"   && <LibraryTab  businessId={businessId} onUploadMore={onUploadMore} />}
         {tab === "settings"  && <SettingsTab businessId={businessId} business={business} igPage={igPage} />}
       </div>
 
