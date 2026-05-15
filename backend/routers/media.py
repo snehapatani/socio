@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
 from postgrest.exceptions import APIError
 from typing import Annotated
 import io
@@ -8,6 +8,7 @@ from PIL import Image
 from db.client import supabase
 from db.errors import handle_pg_error
 from config import settings
+from routers.auth import require_owner_or_admin
 
 router = APIRouter()
 
@@ -136,3 +137,24 @@ def get_media_library(business_id: str):
         "unused_count": len(unused),
         "ready":        len(unused) >= 3,
     }
+
+@router.delete("/{business_id}/media-library/{media_id}")
+def delete_media(
+    business_id: str,
+    media_id: str,
+    _: dict = Depends(require_owner_or_admin),
+):
+    """Soft delete: mark inactive but keep storage + row.
+    Posts that already reference this media stay intact.
+    """
+    result = (
+        supabase.table("media_library")
+        .update({"is_active": False})
+        .eq("id", media_id)
+        .eq("business_id", business_id)
+        .eq("is_active", True)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(404, "Media not found or already removed.")
+    return {"ok": True}

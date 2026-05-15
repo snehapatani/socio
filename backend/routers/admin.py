@@ -6,7 +6,7 @@ from typing import Optional
 
 from db.client import supabase
 from routers.auth import require_admin
-
+from config import settings
 
 router = APIRouter()
 
@@ -146,3 +146,88 @@ def suspend_business(business_id: str):
     if not result.data:
         raise HTTPException(404, "Business not found.")
     return {"ok": True, "business": result.data[0]}
+
+# ── Soft delete (always available) ──────────────────────────────────
+@router.delete("/businesses/{business_id}", dependencies=[Depends(require_admin)])
+def soft_delete_business(business_id: str):
+    """Mark business as deleted. Reversible.
+
+    Side effects beyond setting deleted_at:
+      - sub_status → cancelled (stops billing-related logic)
+      - instagram_pages.is_active → false (revokes posting)
+    """
+    biz = (
+        supabase.table("businesses")
+        .update({"deleted_at": "now()", "sub_status": "cancelled"})
+        .eq("id", business_id)
+        .is_("deleted_at", "null")     # don't re-delete
+        .execute()
+    )
+    if not biz.data:
+        raise HTTPException(404, "Business not found or already deleted.")
+
+    # Deactivate any linked IG pages so the scheduler stops trying to publish
+    supabase.table("instagram_pages") \
+        .update({"is_active": False}) \
+        .eq("business_id", business_id) \
+        .execute()
+
+    return {"ok": True, "business": biz.data[0]}
+
+
+# ── Restore a soft-deleted business ─────────────────────────────────
+@router.post("/businesses/{business_id}/restore", dependencies=[Depends(require_admin)])
+def restore_business(business_id: str):
+    biz = (
+        supabase.table("businesses")
+        .update({"deleted_at": None})
+        .eq("id", business_id)
+        .execute()
+    )
+    if not biz.data:
+        raise HTTPException(404, "Business not found.")
+    return {"ok": True, "business": biz.data[0]}
+
+
+# ── Hard delete (development/staging only) ──────────────────────────
+@router.delete("/businesses/{business_id}/purge", dependencies=[Depends(require_admin)])
+def hard_delete_business(business_id: str):
+    """Permanently delete business and all related rows.
+    BLOCKED in production. Use soft delete instead.
+    """
+    if settings.ENVIRONMENT == "production":
+        raise HTTPException(
+            403,
+            "Hard delete is disabled in production. Use soft delete, "
+            "or run a manual SQL script with documented justification.",
+        )
+
+    # Order matters — children first (no CASCADE on these FKs)
+    # 1. post_insights (FK → posts)
+    post_ids = supabase.table("posts").select("id").eq("business_id", business_id).execute()
+    if post_ids.data:
+        ids = [p["id"] for p in post_ids.data]
+        supabase.table("post_insights").delete().in_("post_id", ids).execute()
+
+    # 2. The rest can go in any order (all FK directly to businesses)
+    for table in ["posts", "media_library", "instagram_pages", "approval_tokens"]:
+        supabase.table(table).delete().eq("business_id", business_id).execute()
+
+    # 3. Storage cleanup — list and remove the businesses/{id}/ folder
+    try:
+        # List all objects under the business's storage prefix
+        files = supabase.storage.from_("media").list(f"businesses/{business_id}")
+        if files:
+            paths = [f"businesses/{business_id}/{f['name']}" for f in files]
+            supabase.storage.from_("media").remove(paths)
+    except Exception as e:
+        # Don't block delete on storage cleanup failure — just log
+        import logging
+        logging.warning("Storage cleanup failed for %s: %s", business_id, e)
+
+    # 4. Finally, the business itself
+    result = supabase.table("businesses").delete().eq("id", business_id).execute()
+    if not result.data:
+        raise HTTPException(404, "Business not found.")
+
+    return {"ok": True, "purged": True}

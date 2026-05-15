@@ -32,4 +32,6 @@ class Settings(BaseSettings):
 
     SUPABASE_JWT_SECRET: str
 
+    ENVIRONMENT: str = "development"   # "development" | "staging" | "production"
+
 settings = Settings()
