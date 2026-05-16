@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
 from db.client import supabase
-from core.auth import require_owner_or_admin
+from core.auth import require_owner_or_admin, get_current_user
 from core.quota import consume_post_quota
 
 from services.captions          import generate_post_captions, generate_carousel_caption
@@ -163,6 +163,44 @@ def update_post(post_id: str, body: PostUpdate, _: dict = Depends(require_owner_
         raise HTTPException(404, "Post not found")
     return result.data[0]
 
+@router.delete("/{post_id}")
+def delete_post(post_id: str, user: dict = Depends(get_current_user)):
+    """Hard delete a not-yet-published post."""
+    post = (supabase.table("posts").select("status, business_id").eq("id", post_id).single().execute())
+
+    if not post.data:
+        raise HTTPException(404, "Post not found")
+
+    if post.data["status"] == "published":
+        raise HTTPException(400, "Published posts can't be deleted here. Remove the post directly on Instagram.", )
+
+    # Ownership check — user must own the business OR be an admin
+    biz = (supabase.table("businesses").select("owner_id").eq("id", post.data["business_id"]).single().execute())
+
+    if not biz.data:
+        raise HTTPException(404, "Business not found")
+
+    if biz.data["owner_id"] != user["id"]:
+        profile = (supabase.table("profiles").select("role").eq("id", user["id"]).single().execute())
+
+        if not profile.data or profile.data.get("role") != "admin":
+            raise HTTPException(403, "Not authorized to delete this post.")
+
+        # ── Refund times_used on every member of this post ───────────
+    media_ids = post.data.get("media_library_ids") or []
+    if media_ids:
+        supabase.rpc("decrement_media_usage", {"media_ids": media_ids}).execute()
+
+
+    # post_insights has FK → posts but no ON DELETE CASCADE; clean up first
+    supabase.table("post_insights").delete().eq("post_id", post_id).execute()
+
+    # Then the post itself
+    result = supabase.table("posts").delete().eq("id", post_id).execute()
+    if not result.data:
+        raise HTTPException(404, "Post not found")
+
+    return {"ok": True}
 
 # ── List posts for a business ───────────────────────────────────────
 @router.get("/business/{business_id}")
