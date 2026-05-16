@@ -161,7 +161,7 @@ export default function Dashboard({ businessId, business, igPage, onUploadMore }
       {/* ── Tab content ──────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto">
         {tab === "dashboard" && <DashboardTab businessId={businessId} />}
-        {tab === "posts"     && <PostsTab businessId={businessId} igPage={igPage} onUploadMore={onUploadMore} />}
+        {tab === "posts"     && <PostsTab businessId={businessId} business={business} igPage={igPage} onUploadMore={onUploadMore} />}
         {tab === "library"   && <LibraryTab  businessId={businessId} onUploadMore={onUploadMore} />}
         {tab === "settings"  && <SettingsTab businessId={businessId} business={business} igPage={igPage} />}
       </div>

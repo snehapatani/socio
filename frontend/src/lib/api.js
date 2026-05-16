@@ -52,6 +52,11 @@ export const api = {
   getPendingMedia: (id)              => req(`/businesses/${id}/pending-media`),
   uploadPending:   (id, formData)    => req(`/businesses/${id}/upload-pending`,  { method: "POST", body: formData }),
   deleteMedia: (businessId, mediaId) =>  req(`/businesses/${businessId}/media-library/${mediaId}`, { method: "DELETE" }),
+  generateCarousel: (businessId, mediaLibraryIds) =>
+  req(`/posts/generate-carousel/${businessId}`, {
+    method: "POST",
+    body: JSON.stringify({ media_library_ids: mediaLibraryIds }),
+  }),
 
   // Posts
   generatePosts:   (businessId)      => req(`/posts/generate/${businessId}`,     { method: "POST" }),

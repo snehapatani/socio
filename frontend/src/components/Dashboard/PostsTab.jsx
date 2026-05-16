@@ -3,6 +3,7 @@ import { api } from "../../lib/api.js";
 import Toast from "../Common/Toast";
 import PostCard from "./PostCard";
 import EditCaptionModal from "./EditCaptionModal";
+import CarouselBuilder from "./CarouselBuilder";   // ← FIX #2
 
 // ═════════════════════════════════════════════════════════════════════
 // Posts tab  (Socio brand — violet / Sora)
@@ -24,7 +25,9 @@ const Spinner = () => (
   <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
 );
 
-export default function PostsTab({ businessId, igPage, onUploadMore }) {
+// ── FIX #1: add `business` to props ─────────────────────────────────
+export default function PostsTab({ businessId, business, igPage, onUploadMore }) {
+  // ── All hooks declared FIRST, no conditional returns above them ──
   const [posts, setPosts]               = useState([]);
   const [loading, setLoading]           = useState(true);
   const [generating, setGen]            = useState(false);
@@ -32,6 +35,7 @@ export default function PostsTab({ businessId, igPage, onUploadMore }) {
   const [toast, setToast]               = useState(null);
   const [editPost, setEditPost]         = useState(null);
   const [uploading, setUploading]       = useState({});
+  const [showCarousel, setShowCarousel] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -42,6 +46,12 @@ export default function PostsTab({ businessId, igPage, onUploadMore }) {
 
   useEffect(() => { load(); }, [load]);
 
+  // ── Derived values (safe — `business` is in props now) ──────────
+  const carouselLimit    = business?.plan?.weekly_carousels   ?? 0;
+  const carouselsUsed    = business?.carousels_used_this_week ?? 0;
+  const canBuildCarousel = carouselLimit > 0 && carouselsUsed < carouselLimit;
+
+  // ── Handlers ────────────────────────────────────────────────────
   async function generate() {
     setGen(true);
     try {
@@ -102,6 +112,21 @@ export default function PostsTab({ businessId, igPage, onUploadMore }) {
   const pending = posts.filter(p => p.status === "pending_approval");
   const rest    = posts.filter(p => p.status !== "pending_approval");
 
+  // ── FIX #3: conditional render INSIDE the return, after all hooks ──
+  if (showCarousel) {
+    return (
+      <CarouselBuilder
+        businessId={businessId}
+        onDone={async (post) => {
+          setShowCarousel(false);
+          await load();
+          setToast({ msg: "Carousel ready — review and approve in your posts." });
+        }}
+        onCancel={() => setShowCarousel(false)}
+      />
+    );
+  }
+
   return (
     <div className="p-4 max-w-2xl mx-auto pb-24">
       {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
@@ -110,6 +135,17 @@ export default function PostsTab({ businessId, igPage, onUploadMore }) {
       <div className="flex gap-2 mb-5 flex-wrap">
         <button onClick={onUploadMore} className={SECONDARY_BTN}>
           Upload media
+        </button>
+        <button
+          onClick={() => setShowCarousel(true)}
+          disabled={!canBuildCarousel}
+          className={canBuildCarousel ? PRIMARY_BTN : SECONDARY_BTN + " opacity-60"}
+        >
+          {carouselLimit === 0
+            ? <>🔒 Carousel — Plan B</>
+            : carouselsUsed >= carouselLimit
+            ? <>Carousel used — resets Monday</>
+            : <>✦ Build carousel</>}
         </button>
         <button onClick={generateImage} disabled={generatingImage} className={PRIMARY_BTN}>
           {generatingImage ? <><Spinner /> Generating…</> : "✦ AI image post"}

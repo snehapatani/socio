@@ -1,36 +1,60 @@
+import { useState } from "react";
 import StatusPill from "../Common/StatusPill";
 import { fmt } from "../../lib/format";
 
-// ═════════════════════════════════════════════════════════════════════
-// PostCard  (single post tile inside PostsTab)
-// ═════════════════════════════════════════════════════════════════════
+// Match the same extensions the backend's _looks_like_video() uses
+const VIDEO_EXTENSIONS = [".mp4", ".mov", ".m4v", ".webm"];
+function isVideoUrl(url) {
+  if (!url) return false;
+  const clean = url.toLowerCase().split("?")[0];
+  return VIDEO_EXTENSIONS.some(ext => clean.endsWith(ext));
+}
 
 export default function PostCard({ post, onEdit, onUpload, uploading }) {
-  const hasMedia = post.media_urls?.length > 0;
-  const isVideo  = post.media_type === "VIDEO";
+  const urls         = post.media_urls || [];
+  const hasMedia     = urls.length > 0;
+  const isCarousel   = post.media_type === "CAROUSEL" || urls.length > 1;
+  const postIsVideo  = post.media_type === "VIDEO";   // for the single-post change-media file input
+  const isPublished  = post.status === "published";
+
+  const [activeSlide, setActiveSlide] = useState(0);
+  const activeUrl     = urls[activeSlide];
+  const activeIsVideo = isVideoUrl(activeUrl);          // ← per-slide, not post-level
+
+  // Single posts (image or video, pending) can swap media inline.
+  // Carousels and published posts cannot.
+  const canChangeMedia = !isPublished && !isCarousel;
 
   return (
     <div className="bg-white rounded-2xl border border-[#EDE9FE] shadow-[0_4px_20px_-8px_rgba(108,71,255,0.12)] overflow-hidden mb-3 transition hover:shadow-[0_8px_28px_-8px_rgba(108,71,255,0.2)]">
-      {/* Media area */}
+      {/* Hero media */}
       <div className="w-full h-40 bg-[#FAFAFF] flex items-center justify-center relative group overflow-hidden">
         {hasMedia ? (
           <>
-            {isVideo ? (
+            {activeIsVideo ? (
               <video
-                src={`${post.media_urls[0]}#t=0.1`}
+                src={`${activeUrl}#t=0.1`}
                 className="w-full h-full object-cover"
                 preload="metadata"
+                muted
               />
             ) : (
-              <img
-                src={post.media_urls[0]}
-                alt=""
-                className="w-full h-full object-cover"
-              />
+              <img src={activeUrl} alt="" className="w-full h-full object-cover" />
             )}
 
-            {/* Play icon on top of video */}
-            {isVideo && (
+            {/* Carousel slide count (top-right) */}
+            {isCarousel && (
+              <div className="absolute top-2 right-2 bg-[#2E1065]/85 backdrop-blur-sm text-white text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-md">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="14" height="14" rx="2"/>
+                  <rect x="7" y="7" width="14" height="14" rx="2"/>
+                </svg>
+                {activeSlide + 1} / {urls.length}
+              </div>
+            )}
+
+            {/* Play icon — any time the active slide is video */}
+            {activeIsVideo && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="bg-white/95 p-3 rounded-full shadow-lg">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="#6C47FF">
@@ -40,20 +64,22 @@ export default function PostCard({ post, onEdit, onUpload, uploading }) {
               </div>
             )}
 
-            {/* Hover overlay → change media */}
-            <label className="absolute inset-0 bg-[#2E1065]/0 group-hover:bg-[#2E1065]/60 transition flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100">
-              <span className="text-white text-xs font-bold">
-                Change {isVideo ? "video" : "photo"}
-              </span>
-              <input
-                type="file"
-                accept={isVideo ? "video/*" : "image/*"}
-                className="hidden"
-                onChange={e => e.target.files?.[0] && onUpload(post.id, e.target.files[0])}
-              />
-            </label>
+            {/* "Change media" overlay — only when allowed */}
+            {canChangeMedia && (
+              <label className="absolute inset-0 bg-[#2E1065]/0 group-hover:bg-[#2E1065]/60 transition flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100">
+                <span className="text-white text-xs font-bold">
+                  Change {postIsVideo ? "video" : "photo"}
+                </span>
+                <input
+                  type="file"
+                  accept={postIsVideo ? "video/*" : "image/*"}
+                  className="hidden"
+                  onChange={e => e.target.files?.[0] && onUpload(post.id, e.target.files[0])}
+                />
+              </label>
+            )}
           </>
-        ) : (
+        ) : !isPublished ? (
           <label className="cursor-pointer flex flex-col items-center gap-2 text-[#A78BFA] hover:text-[#6C47FF] transition">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <rect x="3" y="3" width="18" height="18" rx="3" />
@@ -71,8 +97,54 @@ export default function PostCard({ post, onEdit, onUpload, uploading }) {
               onChange={e => e.target.files?.[0] && onUpload(post.id, e.target.files[0])}
             />
           </label>
+        ) : (
+          <div className="text-xs text-[#4C1D95]/40 font-medium">No media</div>
         )}
       </div>
+
+      {/* Carousel thumbnail strip */}
+      {isCarousel && (
+        <div className="bg-[#FAFAFF] border-t border-[#EDE9FE] px-3 py-2 flex gap-1.5 overflow-x-auto">
+          {urls.map((url, i) => {
+            const slideIsVideo = isVideoUrl(url);
+            const isActive     = i === activeSlide;
+            return (
+              <button
+                key={i}
+                onClick={() => setActiveSlide(i)}
+                aria-label={`Show ${slideIsVideo ? "video" : "photo"} ${i + 1}`}
+                className={`flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden border transition relative ${
+                  isActive
+                    ? "border-[#6C47FF] ring-2 ring-[#6C47FF]/30"
+                    : "border-[#EDE9FE] hover:border-[#C4B5FD] opacity-70 hover:opacity-100"
+                }`}
+              >
+                {slideIsVideo ? (
+                  <video
+                    src={`${url}#t=0.1`}
+                    className="w-full h-full object-cover"
+                    preload="metadata"
+                    muted
+                  />
+                ) : (
+                  <img src={url} alt="" className="w-full h-full object-cover" />
+                )}
+
+                {/* Small play indicator on video thumbs */}
+                {slideIsVideo && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="bg-white/90 rounded-full w-4 h-4 flex items-center justify-center">
+                      <svg width="6" height="6" viewBox="0 0 24 24" fill="#6C47FF">
+                        <path d="M8 5.14v14l11-7-11-7z" />
+                      </svg>
+                    </div>
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Body */}
       <div className="p-4">
@@ -94,8 +166,8 @@ export default function PostCard({ post, onEdit, onUpload, uploading }) {
         )}
 
         {post.ig_permalink && (
-          <a
-            href={post.ig_permalink}
+
+            <a href={post.ig_permalink}
             target="_blank"
             rel="noreferrer"
             className="text-[11px] text-[#6C47FF] hover:text-[#5B36F0] font-bold transition"
