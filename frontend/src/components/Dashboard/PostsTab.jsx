@@ -4,6 +4,7 @@ import Toast from "../Common/Toast";
 import PostCard from "./PostCard";
 import EditCaptionModal from "./EditCaptionModal";
 import CarouselBuilder from "./CarouselBuilder";   // ← FIX #2
+import { useConfirm } from "../Common/Modal";
 
 // ═════════════════════════════════════════════════════════════════════
 // Posts tab  (Socio brand — violet / Sora)
@@ -27,6 +28,8 @@ const Spinner = () => (
 
 // ── FIX #1: add `business` to props ─────────────────────────────────
 export default function PostsTab({ businessId, business, igPage, onUploadMore }) {
+    const confirm = useConfirm();
+
   // ── All hooks declared FIRST, no conditional returns above them ──
   const [posts, setPosts]               = useState([]);
   const [loading, setLoading]           = useState(true);
@@ -36,6 +39,8 @@ export default function PostsTab({ businessId, business, igPage, onUploadMore })
   const [editPost, setEditPost]         = useState(null);
   const [uploading, setUploading]       = useState({});
   const [showCarousel, setShowCarousel] = useState(false);
+
+
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -108,6 +113,27 @@ export default function PostsTab({ businessId, business, igPage, onUploadMore })
       setToast({ msg: "Caption saved" });
     } catch (e) { setToast({ msg: e.message, type: "err" }); }
   }
+
+  async function deletePost(post) {
+        const isCarousel = post.media_type === "CAROUSEL" || (post.media_urls?.length || 0) > 1;
+        const ok = await confirm({
+            title:        "Delete this post?",
+            message:      isCarousel
+            ? "The carousel and its caption will be removed. The library items it used stay safe."
+            : "This post and its caption will be removed. Won't free up your weekly quota.",
+            variant:      "danger",
+            confirmLabel: "Delete post",
+        });
+        if (!ok) return;
+
+        try {
+            await api.deletePost(post.id);
+            await load();
+            setToast({ msg: "Post deleted" });
+        } catch (e) {
+            setToast({ msg: e.message, type: "err" });
+        }
+    }
 
   const pending = posts.filter(p => p.status === "pending_approval");
   const rest    = posts.filter(p => p.status !== "pending_approval");
@@ -193,6 +219,7 @@ export default function PostsTab({ businessId, business, igPage, onUploadMore })
               key={post.id}
               post={post}
               onEdit={setEditPost}
+              onDelete={deletePost}
               onUpload={uploadImage}
               uploading={uploading[post.id]}
             />
@@ -211,6 +238,7 @@ export default function PostsTab({ businessId, business, igPage, onUploadMore })
               key={post.id}
               post={post}
               onEdit={setEditPost}
+              onDelete={deletePost}
               onUpload={uploadImage}
               uploading={uploading[post.id]}
             />

@@ -66,6 +66,7 @@ export const api = {
   updatePost:      (id, data)        => req(`/posts/${id}`,                      { method: "PATCH", body: JSON.stringify(data) }),
   publishPost:     (id)              => req(`/posts/${id}/publish`,              { method: "POST" }),
   fetchInsights:   (id)              => req(`/posts/${id}/insights`,             { method: "POST" }),
+  deletePost:       (postId)         => req(`/posts/${postId}`, { method: "DELETE" }),
 
   // Approval
   sendApproval:    (data)            => req("/approve/send",                     { method: "POST", body: JSON.stringify(data) }),
