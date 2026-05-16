@@ -8,7 +8,7 @@ from PIL import Image
 from db.client import supabase
 from db.errors import handle_pg_error
 from config import settings
-from routers.auth import require_owner_or_admin
+from core.auth import require_owner_or_admin
 
 router = APIRouter()
 

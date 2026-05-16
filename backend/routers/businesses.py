@@ -5,7 +5,9 @@ from typing import Optional
 
 from db.client import supabase
 from db.errors import handle_pg_error
-from routers.auth import get_current_user, require_owner_or_admin
+from core.auth import get_current_user, require_owner_or_admin
+from datetime import date, timedelta
+from config import settings
 
 router = APIRouter()
 
@@ -29,7 +31,10 @@ class BusinessUpdate(BaseModel):
 def get_my_business(user: dict = Depends(get_current_user)):
     biz = (
         supabase.table("businesses")
-        .select("*")
+        .select(
+            "*, "
+            "plan:plans(id, name, weekly_photos, weekly_videos, weekly_carousels, ai_image_gen)"
+        )
         .eq("owner_id", user["id"])
         .is_("deleted_at", "null")
         .maybe_single()
@@ -45,12 +50,19 @@ def get_my_business(user: dict = Depends(get_current_user)):
         .maybe_single()
         .execute()
     )
-    return {**biz.data, "instagram_page": ig.data if ig else None}
+
+    return {
+        **biz.data,
+        "instagram_page": ig.data if ig else None,
+    }
 
 
 # ── Create business (onboarding) ─────────────────────────────────────
 @router.post("/")
 def create_business(body: BusinessCreate, user: dict = Depends(get_current_user)):
+    today      = date.today()
+    trial_end  = today + timedelta(days=settings.TRIAL_DAYS)
+
     try:
         result = supabase.table("businesses").insert({
             "name":             body.name,
@@ -59,6 +71,11 @@ def create_business(body: BusinessCreate, user: dict = Depends(get_current_user)
             "business_type":    body.business_type,
             "brand_tone":       body.brand_tone,
             "business_context": body.business_context or {},
+            # ── plan + trial defaults ──
+            "plan_id":          settings.DEFAULT_PLAN_ID,    # e.g. "plan_a"
+            "sub_status":       "trialing",
+            "sub_start_date":   today.isoformat(),
+            "sub_end_date":     trial_end.isoformat(),
         }).execute()
     except APIError as e:
         handle_pg_error(

@@ -34,4 +34,8 @@ class Settings(BaseSettings):
 
     ENVIRONMENT: str = "development"   # "development" | "staging" | "production"
 
+    DEFAULT_PLAN_ID: str = "plan_a"      # must match a row in plans.id enum
+    TRIAL_DAYS:     int = 14
+    MOCK_AI: bool = False
+
 settings = Settings()

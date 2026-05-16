@@ -1,6 +1,7 @@
+from core import auth
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import auth, businesses, media, posts, approve, dashboard, admin, fbauth
+from routers import businesses, media, posts, approve, dashboard, admin, fbauth
 from config import settings
 from scheduler import start_scheduler
 

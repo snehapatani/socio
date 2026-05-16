@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from db.client import supabase
-from routers.auth import require_admin
+from core.auth import require_admin
 from config import settings
 
 router = APIRouter()
