@@ -68,7 +68,7 @@ def generate_posts(business_id: str, _: dict = Depends(require_owner_or_admin)):
                 "last_used_at": datetime.now(timezone.utc).isoformat(),
             }).eq("id", photo["id"]).execute()
 
-            return {"generated": len(inserted), "posts": inserted}
+        return {"generated": len(inserted), "posts": inserted}
 
     except Exception:
         supabase.rpc("refund_post_quota", {"biz_id": business_id, "post_type": "single"}).execute()

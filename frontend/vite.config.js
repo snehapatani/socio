@@ -9,7 +9,14 @@ export default defineConfig({
       "/auth":       "http://localhost:8000",
       "/businesses": "http://localhost:8000",
       "/posts":      "http://localhost:8000",
-      "/approve":    "http://localhost:8000"
+      "/approve": {
+        target: "http://localhost:8000",
+        bypass(req) {
+          // Result pages are handled by the React app, not the backend
+          const resultPages = ["/approve/success", "/approve/invalid", "/approve/expired", "/approve/already-used"];
+          if (resultPages.some(p => req.url.startsWith(p))) return req.url;
+        },
+      }
     },
   },
 });

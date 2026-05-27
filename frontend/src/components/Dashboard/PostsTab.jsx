@@ -56,6 +56,15 @@ export default function PostsTab({ businessId, business, igPage, onUploadMore })
   const carouselsUsed    = business?.carousels_used_this_week ?? 0;
   const canBuildCarousel = carouselLimit > 0 && carouselsUsed < carouselLimit;
 
+
+  // ── Singles quota (Plan A + Plan B both = 3) ──────────────────────
+const singlesLimit = (business?.plan?.weekly_photos   ?? 0) +
+                     (business?.plan?.weekly_videos   ?? 0);
+const singlesUsed  =  business?.posts_used_this_week  ?? 0;
+const singlesLeft  = Math.max(0, singlesLimit - singlesUsed);
+const canGenerateSingle = singlesLimit > 0 && singlesUsed < singlesLimit;
+
+
   // ── Handlers ────────────────────────────────────────────────────
   async function generate() {
     setGen(true);
@@ -157,6 +166,48 @@ export default function PostsTab({ businessId, business, igPage, onUploadMore })
     <div className="p-4 max-w-2xl mx-auto pb-24">
       {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
 
+        {/* Weekly quota strip */}
+<div className="bg-white rounded-2xl border border-[#EDE9FE] shadow-[0_4px_20px_-8px_rgba(108,71,255,0.12)] p-4 mb-3">
+  <div className="flex items-center justify-between mb-2">
+    <div className="text-[11px] font-bold text-[#6C47FF] tracking-[0.18em]">THIS WEEK</div>
+    <div className="text-xs text-[#4C1D95]/70 font-semibold">
+      {singlesUsed} / {singlesLimit} posts
+      {carouselLimit > 0 && ` · ${carouselsUsed} / ${carouselLimit} carousel`}
+    </div>
+  </div>
+
+  {/* Singles dots */}
+  <div className="flex gap-1.5">
+    {Array.from({ length: singlesLimit }).map((_, i) => (
+      <div
+        key={i}
+        className={`h-1.5 flex-1 rounded-full transition ${
+          i < singlesUsed
+            ? "bg-gradient-to-r from-[#6C47FF] to-[#A78BFA]"
+            : "bg-[#EDE9FE]"
+        }`}
+      />
+    ))}
+    {/* Optional: separate carousel slot for Plan B */}
+    {carouselLimit > 0 && (
+      <div
+        className={`h-1.5 w-6 rounded-full ml-1 ring-1 ring-[#EDE9FE] transition ${
+          carouselsUsed > 0
+            ? "bg-gradient-to-r from-[#7C3AED] to-[#A78BFA]"
+            : "bg-[#FAFAFF]"
+        }`}
+        title="Carousel slot"
+      />
+    )}
+  </div>
+
+  {!canGenerateSingle && (
+    <div className="text-[11px] text-[#4C1D95]/60 mt-2 font-medium">
+      Quota resets Monday. You can still upload media to your library.
+    </div>
+  )}
+</div>
+
       {/* Actions bar */}
       <div className="flex gap-2 mb-5 flex-wrap">
         <button onClick={onUploadMore} className={SECONDARY_BTN}>
@@ -173,12 +224,36 @@ export default function PostsTab({ businessId, business, igPage, onUploadMore })
             ? <>Carousel used — resets Monday</>
             : <>✦ Build carousel</>}
         </button>
-        <button onClick={generateImage} disabled={generatingImage} className={PRIMARY_BTN}>
-          {generatingImage ? <><Spinner /> Generating…</> : "✦ AI image post"}
-        </button>
-        <button onClick={generate} disabled={generating} className={PRIMARY_BTN}>
-          {generating ? <><Spinner /> Generating…</> : "✦ Generate weekly posts"}
-        </button>
+        {/* AI image post */}
+<button
+  onClick={generateImage}
+  disabled={generatingImage || !canGenerateSingle}
+  className={canGenerateSingle ? PRIMARY_BTN : SECONDARY_BTN + " opacity-60 cursor-not-allowed"}
+>
+  {generatingImage ? (
+    <><Spinner /> Generating…</>
+  ) : !canGenerateSingle ? (
+    <>Weekly quota reached</>
+  ) : (
+    <>✦ AI image post</>
+  )}
+</button>
+        {/* Generate weekly posts (batch of 3) */}
+<button
+  onClick={generate}
+  disabled={generating || !canGenerateSingle}
+  className={canGenerateSingle ? PRIMARY_BTN : SECONDARY_BTN + " opacity-60 cursor-not-allowed"}
+>
+  {generating ? (
+    <><Spinner /> Generating…</>
+  ) : singlesUsed === 0 ? (
+    <>✦ Generate weekly posts</>
+  ) : !canGenerateSingle ? (
+    <>Weekly quota reached</>
+  ) : (
+    <>✦ Generate {singlesLeft} more</>
+  )}
+</button>
         {pending.length > 0 && (
           <button
             onClick={sendApproval}

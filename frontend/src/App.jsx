@@ -10,6 +10,7 @@ import ConnectInstagram from "./components/Onboarding/ConnectInstagram";
 import UploadMedia      from "./components/Onboarding/UploadMedia";
 import Dashboard        from "./components/Dashboard/Dashboard";
 import Admin            from "./components/Admin/Admin";
+import ApproveResult    from "./components/Approve/ApproveResult";
 
 // ═════════════════════════════════════════════════════════════════════
 // App  —  top-level router.
@@ -26,6 +27,11 @@ export default function App() {
   // /admin route is fully separate — Admin handles its own auth check
   if (typeof window !== "undefined" && window.location.pathname.startsWith("/admin")) {
     return <Admin />;
+  }
+
+  // /approve/* result pages are public — no session required
+  if (typeof window !== "undefined" && window.location.pathname.startsWith("/approve/")) {
+    return <ApproveResult />;
   }
 
   const [session, setSession] = useState("checking");
