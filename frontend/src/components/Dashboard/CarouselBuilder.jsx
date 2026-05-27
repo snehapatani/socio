@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { api } from "../../lib/api.js";
-import Toast from "../Common/Toast";
+import Toast from "../Common/Toast.jsx";
 
 // ═════════════════════════════════════════════════════════════════════
 // CarouselBuilder  —  multi-select + reorder library items to build
