@@ -12,6 +12,7 @@ from services.email_builder import (
     FROM_EMAIL,
     photo_reminder_email,
     approval_email,
+    post_published_email,
     _logo_block,
     _cta_button,
     _shell,
@@ -219,3 +220,163 @@ class TestApprovalEmail:
                 "media_urls": ["https://cdn.example.com/reel.mp4"]}
         _, html = self._build(posts=[post])
         assert "VIDEO" in html  # extension wins over media_type
+
+
+class TestPostPublishedEmail:
+    _POST = {
+        "media_type": "IMAGE",
+        "media_urls": ["https://cdn.example.com/photo.jpg"],
+        "caption": "Test caption for the published post",
+        "hashtags": ["coffee", "morning"],
+        "published_at": "2026-05-27T12:30:00+00:00",
+    }
+
+    def _build(self, **kw):
+        defaults = dict(
+            post=self._POST,
+            biz_name="Test Biz",
+            ig_username="test_account",
+            permalink="https://www.instagram.com/p/abc123/",
+            dashboard_url="http://localhost:5173",
+        )
+        return post_published_email(**{**defaults, **kw})
+
+    # ── return type ──────────────────────────────────────────────────
+
+    def test_returns_two_strings(self):
+        subject, html = self._build()
+        assert isinstance(subject, str) and isinstance(html, str)
+
+    # ── subject ──────────────────────────────────────────────────────
+
+    def test_subject_contains_biz_name(self):
+        subject, _ = self._build(biz_name="Bella Café")
+        assert "Bella Café" in subject
+
+    def test_subject_mentions_instagram(self):
+        subject, _ = self._build()
+        assert "Instagram" in subject
+
+    # ── identity fields ───────────────────────────────────────────────
+
+    def test_html_contains_at_ig_username(self):
+        _, html = self._build(ig_username="my_shop")
+        assert "@my_shop" in html
+
+    def test_html_contains_biz_name(self):
+        _, html = self._build(biz_name="Green Leaf")
+        assert "Green Leaf" in html
+
+    def test_html_contains_published_timestamp(self):
+        _, html = self._build(post={**self._POST, "published_at": "2026-05-27T12:30:00+00:00"})
+        assert "2026-05-27" in html
+
+    # ── post content ─────────────────────────────────────────────────
+
+    def test_html_contains_caption(self):
+        _, html = self._build(post={**self._POST, "caption": "Unique sentinel caption xyz"})
+        assert "Unique sentinel caption xyz" in html
+
+    def test_html_contains_hashtags(self):
+        _, html = self._build(post={**self._POST, "hashtags": ["coffee", "morning"]})
+        assert "#coffee" in html
+        assert "#morning" in html
+
+    def test_empty_hashtags_renders_no_hash_symbols(self):
+        _, html = self._build(post={**self._POST, "hashtags": []})
+        # The only # in the HTML should be inside colour hex codes (e.g. #6C47FF),
+        # not standalone hashtag words preceded by a space.
+        assert " #coffee" not in html and " #morning" not in html
+
+    def test_no_hashtags_key_does_not_crash(self):
+        post = {k: v for k, v in self._POST.items() if k != "hashtags"}
+        _, html = self._build(post=post)
+        assert isinstance(html, str)
+
+    def test_caption_truncated_at_300_chars(self):
+        long = "B" * 400
+        _, html = self._build(post={**self._POST, "caption": long})
+        assert "B" * 400 not in html
+        assert "B" * 300 in html
+        assert "..." in html
+
+    def test_caption_not_truncated_when_short(self):
+        _, html = self._build(post={**self._POST, "caption": "Short caption"})
+        assert "Short caption" in html
+        assert "Short caption..." not in html
+
+    # ── CTA and links ────────────────────────────────────────────────
+
+    def test_html_contains_permalink(self):
+        _, html = self._build(permalink="https://www.instagram.com/p/abc123/")
+        assert "https://www.instagram.com/p/abc123/" in html
+
+    def test_html_contains_view_on_instagram_label(self):
+        _, html = self._build()
+        assert "View on Instagram" in html
+
+    def test_html_contains_dashboard_url(self):
+        _, html = self._build(dashboard_url="http://dash.test.com")
+        assert "http://dash.test.com" in html
+
+    # ── layout ───────────────────────────────────────────────────────
+
+    def test_html_uses_560_max_width(self):
+        _, html = self._build()
+        assert "max-width:560px" in html
+
+    def test_html_has_doctype(self):
+        _, html = self._build()
+        assert "<!DOCTYPE html>" in html
+
+    # ── media type rendering ─────────────────────────────────────────
+
+    def test_image_post_shows_img_src(self):
+        post = {**self._POST, "media_type": "IMAGE",
+                "media_urls": ["https://cdn.example.com/photo.jpg"]}
+        _, html = self._build(post=post)
+        assert 'src="https://cdn.example.com/photo.jpg"' in html
+
+    def test_video_post_shows_play_icon_not_raw_src(self):
+        post = {**self._POST, "media_type": "VIDEO",
+                "media_urls": ["https://cdn.example.com/clip.mp4"]}
+        _, html = self._build(post=post)
+        assert "VIDEO" in html
+        assert "play--v1.png" in html
+        assert '<img src="https://cdn.example.com/clip.mp4"' not in html
+
+    def test_video_url_extension_overrides_image_media_type(self):
+        post = {**self._POST, "media_type": "IMAGE",
+                "media_urls": ["https://cdn.example.com/reel.mp4"]}
+        _, html = self._build(post=post)
+        assert "VIDEO" in html
+
+    def test_carousel_shows_thumbnails(self):
+        post = {**self._POST, "media_type": "CAROUSEL",
+                "media_urls": ["https://cdn.example.com/a.jpg",
+                               "https://cdn.example.com/b.jpg",
+                               "https://cdn.example.com/c.jpg"]}
+        _, html = self._build(post=post)
+        assert "https://cdn.example.com/a.jpg" in html
+        assert "https://cdn.example.com/b.jpg" in html
+
+    def test_carousel_shows_slide_count_badge(self):
+        post = {**self._POST, "media_type": "CAROUSEL",
+                "media_urls": ["https://cdn.example.com/a.jpg",
+                               "https://cdn.example.com/b.jpg"]}
+        _, html = self._build(post=post)
+        assert "CAROUSEL" in html
+        assert "2 slides" in html
+
+    def test_carousel_extra_slides_label(self):
+        urls = [f"https://cdn.example.com/{i}.jpg" for i in range(6)]
+        post = {**self._POST, "media_type": "CAROUSEL", "media_urls": urls}
+        _, html = self._build(post=post)
+        assert "+2" in html   # only first 4 shown, +2 label for rest
+
+    def test_legacy_media_url_fallback(self):
+        post = {"caption": "Old post", "media_type": "IMAGE",
+                "media_url": "https://cdn.example.com/old.jpg",
+                "hashtags": [], "published_at": "2026-01-01T10:00:00"}
+        _, html = self._build(post=post)
+        assert "https://cdn.example.com/old.jpg" in html

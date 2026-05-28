@@ -201,6 +201,116 @@ def _post_preview(p: dict) -> str:
         </div>"""
 
 
+def post_published_email(
+    *,
+    post: dict,
+    biz_name: str,
+    ig_username: str,
+    permalink: str,
+    dashboard_url: str,
+) -> tuple[str, str]:
+    """Return (subject, html) for the post-published confirmation email."""
+    media_type   = (post.get("media_type") or "IMAGE").upper()
+    urls         = post.get("media_urls") or []
+    if not urls and post.get("media_url"):
+        urls = [post["media_url"]]
+    caption      = post.get("caption") or ""
+    hashtags     = post.get("hashtags") or []
+    published_at = (post.get("published_at") or "")[:16].replace("T", " ")
+
+    # ── media block ──────────────────────────────────────────────────
+    if media_type == "CAROUSEL" or len(urls) > 1:
+        thumb_cells = "".join(
+            f'<td width="25%" style="padding:2px;">'
+            f'<img src="{u}" width="100%" style="display:block;border-radius:8px;height:90px;object-fit:cover;" /></td>'
+            for u in urls[:4]
+        )
+        extra_label = (
+            f"<p style='font-size:11px;color:#A78BFA;margin:6px 0 0;text-align:right;"
+            f"font-family:sans-serif;'>+{len(urls)-4} more slides</p>"
+            if len(urls) > 4 else ""
+        )
+        media_block = f"""
+          <table width="100%" border="0" cellpadding="0" cellspacing="0"
+                 style="border-radius:12px;overflow:hidden;margin-bottom:6px;">
+            <tr>{thumb_cells}</tr>
+          </table>
+          {extra_label}
+          <div style="display:inline-block;margin:8px 0 14px;background:#EDE9FE;color:#6C47FF;
+                      font-size:10px;font-weight:700;letter-spacing:0.5px;padding:3px 8px;
+                      border-radius:20px;font-family:sans-serif;">
+            CAROUSEL &nbsp;·&nbsp; {len(urls)} slides
+          </div>"""
+
+    elif media_type == "VIDEO" or (urls and _is_video_url(urls[0])):
+        media_block = """
+          <div style="width:100%;height:200px;background:linear-gradient(135deg,#1a0f3c,#2E1065);
+                      border-radius:12px;text-align:center;padding-top:68px;box-sizing:border-box;
+                      margin-bottom:14px;">
+            <table border="0" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+              <tr>
+                <td align="center" bgcolor="#6C47FF"
+                    style="border-radius:50%;padding:16px;width:52px;height:52px;">
+                  <img src="https://img.icons8.com/ios-glyphs/30/ffffff/play--v1.png"
+                       width="24" height="24" style="display:block;" />
+                </td>
+              </tr>
+            </table>
+            <p style="color:#C4B5FD;font-size:11px;margin:10px 0 0;font-family:sans-serif;
+                      letter-spacing:0.5px;">VIDEO (REEL)</p>
+          </div>"""
+
+    else:
+        src = urls[0] if urls else "https://via.placeholder.com/520x260?text=Post"
+        media_block = (
+            f'<img src="{src}" style="width:100%;height:220px;object-fit:cover;'
+            f'display:block;border-radius:12px;margin-bottom:14px;" />'
+        )
+
+    # ── hashtags ─────────────────────────────────────────────────────
+    tag_html = ""
+    if hashtags:
+        tag_html = (
+            '<p style="font-size:13px;color:#7C3AED;margin:0 0 24px;'
+            "font-family:'Sora',Inter,sans-serif;line-height:1.6;\">"
+            + " ".join(f"#{h}" for h in hashtags)
+            + "</p>"
+        )
+
+    content = f"""  <h2 style="font-size:22px;font-weight:700;color:#2E1065;margin:0 0 6px;
+          font-family:'Sora',Inter,sans-serif;letter-spacing:-0.3px;">
+    Your post just went live &#10022;
+  </h2>
+  <p style="font-size:14px;color:#7C3AED;margin:0 0 24px;
+             font-family:'Sora',Inter,sans-serif;line-height:1.5;">
+    Published to <strong style="color:#2E1065;">@{ig_username}</strong>
+    &nbsp;&middot;&nbsp; <strong style="color:#2E1065;">{biz_name}</strong>
+    &nbsp;&middot;&nbsp; {published_at} UTC
+  </p>
+
+  <div style="border:1px solid #EDE9FE;border-radius:16px;padding:16px;margin-bottom:24px;
+              background:#ffffff;box-shadow:0 4px 20px -8px rgba(108,71,255,0.10);">
+    {media_block}
+    <p style="font-size:14px;line-height:1.7;color:#2E1065;margin:0 0 10px;
+               font-family:'Sora',Inter,sans-serif;">
+      {caption[:300]}{"..." if len(caption) > 300 else ""}
+    </p>
+    {tag_html}
+  </div>
+
+{_cta_button(permalink, "View on Instagram &rarr;")}
+
+  <p style="font-size:12px;color:#A78BFA;text-align:center;margin-top:20px;
+             font-family:'Sora',Inter,sans-serif;line-height:1.5;">
+    <a href="{dashboard_url}" style="color:#6C47FF;text-decoration:underline;">
+      Go to your dashboard
+    </a>
+  </p>"""
+
+    subject = f"✦ {biz_name}: your post is live on Instagram"
+    return subject, _shell(content, max_width=560)
+
+
 def approval_email(
     *,
     posts: list[dict],

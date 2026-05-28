@@ -9,10 +9,17 @@ _mock_requests = MagicMock()
 _mock_security = MagicMock()
 _mock_security.decrypt_token.return_value = "decrypted-token"
 
-sys.modules["db"]            = MagicMock()
-sys.modules["db.client"]    = MagicMock(supabase=_mock_supabase)
-sys.modules["core.security"] = _mock_security
-sys.modules["requests"]     = _mock_requests
+_mock_resend         = MagicMock()
+_mock_email_builder  = MagicMock()
+_mock_email_builder.post_published_email.return_value = ("Published subject", "<html/>")
+_mock_email_builder.FROM_EMAIL = "test@resend.dev"
+
+sys.modules["db"]                       = MagicMock()
+sys.modules["db.client"]               = MagicMock(supabase=_mock_supabase)
+sys.modules["core.security"]           = _mock_security
+sys.modules["requests"]                = _mock_requests
+sys.modules["resend"]                  = _mock_resend
+sys.modules["services.email_builder"]  = _mock_email_builder
 
 import pytest
 from fastapi import HTTPException
@@ -230,7 +237,12 @@ _DEFAULT_POST = {
     "media_urls": ["https://cdn.test/photo.jpg"],
     "instagram_pages": {
         "ig_user_id": _IG,
+        "ig_username": "test_ig_account",
         "access_token_encrypted": "enc-token",
+    },
+    "businesses": {
+        "name": "Test Biz",
+        "owner_email": "owner@test.com",
     },
 }
 
@@ -239,6 +251,11 @@ class TestPublishPost:
     def setup_method(self):
         _mock_supabase.reset_mock()
         _mock_requests.reset_mock()
+        _mock_resend.reset_mock()
+        _mock_email_builder.reset_mock()
+        # Restore post_published_email return value after reset
+        _mock_email_builder.post_published_email.return_value = ("Published subject", "<html/>")
+        _mock_email_builder.FROM_EMAIL = "test@resend.dev"
         # Explicitly clear side_effects — reset_mock() doesn't clear child side_effects
         _mock_requests.post.return_value.json.side_effect = None
         _mock_requests.get.return_value.json.side_effect  = None
@@ -326,3 +343,75 @@ class TestPublishPost:
         with patch("services.ig_publisher.time.sleep"):
             result = publish_post(_PID)
         assert result["published"] is True
+
+    # ── published notification email ──────────────────────────────────
+
+    def test_sends_published_email_on_success(self):
+        self._stub_post(_DEFAULT_POST)
+        self._stub_ig_success()
+        with patch("services.ig_publisher.time.sleep"):
+            with patch("services.ig_publisher._send_published_email") as mock_email:
+                publish_post(_PID)
+        mock_email.assert_called_once()
+
+    def test_published_email_receives_permalink(self):
+        self._stub_post(_DEFAULT_POST)
+        self._stub_ig_success()
+        with patch("services.ig_publisher.time.sleep"):
+            with patch("services.ig_publisher._send_published_email") as mock_email:
+                publish_post(_PID)
+        _, kwargs = mock_email.call_args
+        assert kwargs["permalink"] == "https://www.instagram.com/p/xyz"
+
+    def test_published_email_receives_ig_page(self):
+        self._stub_post(_DEFAULT_POST)
+        self._stub_ig_success()
+        with patch("services.ig_publisher.time.sleep"):
+            with patch("services.ig_publisher._send_published_email") as mock_email:
+                publish_post(_PID)
+        _, kwargs = mock_email.call_args
+        assert kwargs["ig"]["ig_username"] == "test_ig_account"
+
+    def test_published_email_post_has_published_at(self):
+        self._stub_post(_DEFAULT_POST)
+        self._stub_ig_success()
+        with patch("services.ig_publisher.time.sleep"):
+            with patch("services.ig_publisher._send_published_email") as mock_email:
+                publish_post(_PID)
+        _, kwargs = mock_email.call_args
+        assert kwargs["post"].get("published_at") is not None
+
+    def test_email_failure_does_not_raise(self):
+        self._stub_post(_DEFAULT_POST)
+        self._stub_ig_success()
+        with patch("services.ig_publisher.time.sleep"):
+            with patch("services.ig_publisher._send_published_email",
+                       side_effect=Exception("resend down")):
+                result = publish_post(_PID)   # must NOT raise
+        assert result["published"] is True
+
+    def test_no_email_sent_on_ig_error(self):
+        self._stub_post(_DEFAULT_POST)
+        _mock_requests.post.return_value.json.return_value = {"error": {"message": "rate limit"}}
+        with patch("services.ig_publisher._send_published_email") as mock_email:
+            with pytest.raises(HTTPException):
+                publish_post(_PID)
+        mock_email.assert_not_called()
+
+    def test_send_published_email_uses_owner_email(self):
+        self._stub_post(_DEFAULT_POST)
+        self._stub_ig_success()
+        with patch("services.ig_publisher.time.sleep"):
+            with patch("services.ig_publisher.resend") as mock_r:
+                publish_post(_PID)
+        send_kwargs = mock_r.Emails.send.call_args[0][0]
+        assert send_kwargs["to"] == "owner@test.com"
+
+    def test_send_published_email_skipped_when_no_owner_email(self):
+        post = {**_DEFAULT_POST, "businesses": {"name": "Biz", "owner_email": None}}
+        self._stub_post(post)
+        self._stub_ig_success()
+        with patch("services.ig_publisher.time.sleep"):
+            with patch("services.ig_publisher.resend") as mock_r:
+                publish_post(_PID)
+        mock_r.Emails.send.assert_not_called()

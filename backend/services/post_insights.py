@@ -14,7 +14,7 @@ def fetch_and_store_insights(post_id: str) -> dict:
     """Pull current insights from IG, insert a post_insights row."""
     post_resp = (
         supabase.table("posts")
-        .select("ig_media_id, instagram_pages(access_token)")
+        .select("ig_media_id, instagram_pages(access_token_encrypted)")
         .eq("id", post_id)
         .eq("status", "published")
         .single()

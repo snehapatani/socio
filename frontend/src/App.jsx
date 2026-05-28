@@ -39,6 +39,7 @@ export default function App() {
   const [business,   setBusiness]   = useState(null);
   const [igPage,     setIgPage]     = useState(null);
   const [appState,   setAppState]   = useState("loading");
+  const [uploadFromDashboard, setUploadFromDashboard] = useState(false);
 
   // ── Track auth state ─────────────────────────────────────────────
   useEffect(() => {
@@ -138,6 +139,7 @@ export default function App() {
 
   async function handleIgConnected() {
     await refreshBusiness();
+    setUploadFromDashboard(false);
     setAppState("upload_photos");
   }
 
@@ -157,7 +159,15 @@ export default function App() {
   if (appState === "sign_in")       return <SignIn onSignedIn={handleSignedIn} onBack={goToLanding} onCreateInstead={goToOnboarding} />;
   if (appState === "onboarding")    return <Onboarding onDone={handleOnboarded} />;
   if (appState === "connect_ig")    return <ConnectInstagram businessId={business?.id} business={business} onConnected={handleIgConnected} />;
-  if (appState === "upload_photos") return <UploadMedia businessId={business?.id} business={business} onReady={handleUploadDone} />;
+  if (appState === "upload_photos") return (
+    <UploadMedia
+      businessId={business?.id}
+      business={business}
+      onReady={handleUploadDone}
+      fromDashboard={uploadFromDashboard}
+      onBack={uploadFromDashboard ? () => setAppState("dashboard") : null}
+    />
+  );
 
   return (
     <Dashboard
@@ -165,7 +175,7 @@ export default function App() {
       business={business}
       igPage={igPage}
       profile={profile}
-      onUploadMore={() => setAppState("upload_photos")}
+      onUploadMore={() => { setUploadFromDashboard(true); setAppState("upload_photos"); }}
       onSignOut={handleSignOut}
     />
   );

@@ -16,6 +16,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
+import resend
 import requests
 from fastapi import HTTPException
 
@@ -153,7 +154,7 @@ def publish_post(post_id: str) -> dict:
     """
     post_resp = (
         supabase.table("posts")
-        .select("*, instagram_pages(*)")
+        .select("*, instagram_pages(*), businesses(name, owner_email)")
         .eq("id", post_id)
         .single()
         .execute()
@@ -195,12 +196,22 @@ def publish_post(post_id: str) -> dict:
         _mark_failed(post_id, e.detail)
         raise HTTPException(502, f"Instagram error ({e.code}): {e.detail}")
 
+    published_at = datetime.now(timezone.utc).isoformat()
     supabase.table("posts").update({
         "status":       "published",
-        "published_at": datetime.now(timezone.utc).isoformat(),
+        "published_at": published_at,
         "ig_media_id":  ig_media_id,
         "ig_permalink": permalink,
     }).eq("id", post_id).execute()
+
+    try:
+        _send_published_email(
+            post={**post, "published_at": published_at},
+            ig=ig,
+            permalink=permalink,
+        )
+    except Exception as e:
+        log.warning("Published notification email failed: %s", e)
 
     return {"published": True, "ig_media_id": ig_media_id, "permalink": permalink}
 
@@ -232,6 +243,27 @@ def _create_carousel(ig_user_id: str, access_token: str, urls: list[str], captio
 
 def _looks_like_video(url: str) -> bool:
     return any(url.lower().split("?")[0].endswith(ext) for ext in (".mp4", ".mov", ".m4v"))
+
+
+def _send_published_email(post: dict, ig: dict, permalink: str) -> None:
+    from services.email_builder import post_published_email, FROM_EMAIL
+    from config import settings
+
+    biz = post.get("businesses") or {}
+    owner_email = biz.get("owner_email")
+    if not owner_email:
+        return
+
+    subject, html = post_published_email(
+        post=post,
+        biz_name=biz.get("name", ""),
+        ig_username=ig.get("ig_username", ""),
+        permalink=permalink,
+        dashboard_url=settings.FRONTEND_URL,
+    )
+
+    resend.api_key = settings.RESEND_API_KEY
+    resend.Emails.send({"from": FROM_EMAIL, "to": owner_email, "subject": subject, "html": html})
 
 
 def _mark_failed(post_id: str, detail) -> None:
