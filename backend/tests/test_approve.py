@@ -118,6 +118,7 @@ def mock_settings():
 def test_returns_sent_true_and_token(body, mock_settings):
     sb, _ = _make_supabase_mock()
     with patch("routers.approve.supabase", sb), \
+         patch("routers.approve.resend", MagicMock()), \
          patch("routers.approve.settings", mock_settings), \
          patch("routers.approve.secrets.token_urlsafe", return_value=FAKE_TOKEN):
 
@@ -126,12 +127,12 @@ def test_returns_sent_true_and_token(body, mock_settings):
     assert result["sent"] is True
     assert result["token"] == FAKE_TOKEN
     assert result["to"] == FAKE_BUSINESS["owner_email"]
-    assert result["scheduled"] is True
 
 
-def test_token_inserted_with_email_queued(body, mock_settings):
+def test_token_inserted_into_supabase(body, mock_settings):
     sb, tokens_mock = _make_supabase_mock()
     with patch("routers.approve.supabase", sb), \
+         patch("routers.approve.resend", MagicMock()), \
          patch("routers.approve.settings", mock_settings), \
          patch("routers.approve.secrets.token_urlsafe", return_value=FAKE_TOKEN):
 
@@ -142,7 +143,19 @@ def test_token_inserted_with_email_queued(body, mock_settings):
     assert insert_call["business_id"] == BUSINESS_ID
     assert insert_call["post_ids"] == POST_IDS
     assert "expires_at" in insert_call
-    assert insert_call["email_sent_at"] is None  # queued, not sent yet
+
+
+def test_email_sent_once(body, mock_settings):
+    sb, _ = _make_supabase_mock()
+    mock_resend = MagicMock()
+    with patch("routers.approve.supabase", sb), \
+         patch("routers.approve.resend", mock_resend), \
+         patch("routers.approve.settings", mock_settings), \
+         patch("routers.approve.secrets.token_urlsafe", return_value=FAKE_TOKEN):
+
+        send_approval_email(body)
+
+    mock_resend.Emails.send.assert_called_once()
 
 
 # ── Error cases ───────────────────────────────────────────────────────────────
@@ -173,8 +186,22 @@ def test_raises_404_when_business_not_found(mock_settings):
     assert "business" in exc.value.detail.lower()
 
 
-# ── Media rendering ───────────────────────────────────────────────────────────
+def test_no_email_sent_when_posts_missing(mock_settings):
+    sb, _ = _make_supabase_mock(posts_data=[])
+    mock_resend = MagicMock()
+    body = ApprovalRequest(business_id=BUSINESS_ID, post_ids=POST_IDS)
+    with patch("routers.approve.supabase", sb), \
+         patch("routers.approve.resend", mock_resend), \
+         patch("routers.approve.settings", mock_settings):
 
-# NOTE: Email content tests moved to test_email_builder.py::TestApprovalEmail
-# The endpoint now only queues the email; the scheduler job sends it.
-# Email rendering logic is tested separately in the email_builder module.
+        with pytest.raises(HTTPException):
+            send_approval_email(body)
+
+    mock_resend.Emails.send.assert_not_called()
+
+
+# ── Notes ──────────────────────────────────────────────────────────────────
+
+# Email content/rendering tests are in test_email_builder.py::TestApprovalEmail
+# The endpoint sends emails immediately for manual approval requests.
+# The scheduler job job_generate_all also sends approval emails when posts are generated (weekly).
