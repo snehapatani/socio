@@ -3,12 +3,10 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from db.client import supabase
 from config import settings
-from services.email_builder import approval_email, FROM_EMAIL
-import secrets, resend
+import secrets
 from datetime import datetime, timedelta, timezone
 
-router   = APIRouter()
-resend.api_key = settings.RESEND_API_KEY   # set via env — see services/email.py
+router = APIRouter()
 
 # ── Generate approval token + send digest email ───────────────────────
 class ApprovalRequest(BaseModel):
@@ -38,26 +36,10 @@ def send_approval_email(body: ApprovalRequest):
         "business_id":  body.business_id,
         "post_ids":     body.post_ids,
         "expires_at":   expires_at.isoformat(),
+        "email_sent_at": None,
     }).execute()
 
-    approve_url = f"{settings.FRONTEND_URL}/approve/{token}"
-
-    subject, html = approval_email(
-        posts=posts.data,
-        biz_name=biz.data["name"],
-        approve_url=approve_url,
-        frontend_url=settings.FRONTEND_URL,
-    )
-
-    resend.Emails.send({
-        "from":    FROM_EMAIL,
-        "to":      "snehapatani@gmail.com",
-        "subject": subject,
-        "html":    html,
-    })
-
-
-    return {"sent": True, "token": token, "to": biz.data["owner_email"]}
+    return {"sent": True, "token": token, "to": biz.data["owner_email"], "scheduled": True}
 
 
 # ── One-click approve via token ───────────────────────────────────────
