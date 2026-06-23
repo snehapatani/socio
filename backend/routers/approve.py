@@ -52,7 +52,7 @@ def send_approval_email(body: ApprovalRequest):
 
     resend.Emails.send({
         "from": FROM_EMAIL,
-        "to": biz.data["owner_email"],
+        "to": "snehapatani@gmail.com",
         "subject": subject,
         "html": html,
     })

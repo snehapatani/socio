@@ -58,7 +58,7 @@ def job_generate_all():
 
                     resend_client.Emails.send({
                         "from": FROM_EMAIL,
-                        "to": biz_info.data["owner_email"],
+                        "to": "snehapatani@gmail.com",
                         "subject": subject,
                         "html": html,
                     })
