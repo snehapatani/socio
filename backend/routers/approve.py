@@ -71,8 +71,6 @@ def approve_posts(token: str):
     rows = supabase.table("approval_tokens").select("*").eq("token", token).limit(1).execute()
 
     log.warning(f"APPROVE_DEBUG: Query returned {len(rows.data or [])} rows")
-    if rows.error:
-        log.error(f"APPROVE_DEBUG: Supabase error: {rows.error}")
 
     if not rows.data:
         log.warning(f"APPROVE_DEBUG: Token not found in database, returning invalid")
