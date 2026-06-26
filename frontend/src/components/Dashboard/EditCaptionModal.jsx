@@ -24,6 +24,19 @@ export default function EditCaptionModal({ post, onChange, onClose, onSave }) {
     return post.scheduled_at.split("T")[1].substring(0, 5);
   };
 
+  const getHashtagsString = () => {
+    if (!post.hashtags || !Array.isArray(post.hashtags)) return "";
+    return post.hashtags.join(" ");
+  };
+
+  const handleHashtagsChange = (value) => {
+    const hashtags = value
+      .split(/\s+/)
+      .filter(tag => tag.length > 0)
+      .map(tag => tag.replace(/^#/, ""));
+    onChange({ ...post, hashtags });
+  };
+
   return (
     <div
       className="fixed inset-0 bg-[#2E1065]/40 backdrop-blur-sm z-40 flex items-end justify-center"
@@ -67,6 +80,19 @@ export default function EditCaptionModal({ post, onChange, onClose, onSave }) {
               onChange={e => handleScheduledAtChange(getDateFromScheduledAt(), e.target.value)}
             />
           </div>
+        </div>
+
+        {/* Hashtags */}
+        <div className="mb-4">
+          <label className="text-xs text-[#4C1D95]/70 font-semibold mb-1.5 block">Hashtags</label>
+          <input
+            type="text"
+            placeholder="e.g. coffee morning vibes (space separated)"
+            className="w-full bg-[#FAFAFF] border border-[#EDE9FE] rounded-xl p-3 text-sm text-[#2E1065] outline-none focus:border-[#6C47FF] focus:ring-2 focus:ring-[#6C47FF]/15 transition placeholder-[#4C1D95]/40"
+            value={getHashtagsString()}
+            onChange={e => handleHashtagsChange(e.target.value)}
+          />
+          <p className="text-[11px] text-[#4C1D95]/60 mt-1.5">Space-separated, # symbols optional</p>
         </div>
 
         {/* Buttons */}

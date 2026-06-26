@@ -120,6 +120,9 @@ const canGenerateSingle = singlesLimit > 0 && singlesUsed < singlesLimit;
       if (editPost.scheduled_at) {
         updateData.scheduled_at = editPost.scheduled_at;
       }
+      if (editPost.hashtags) {
+        updateData.hashtags = editPost.hashtags;
+      }
       await api.updatePost(editPost.id, updateData, businessId);
       setEditPost(null);
       await load();
