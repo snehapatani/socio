@@ -63,7 +63,7 @@ export const api = {
   generateAIImage: (businessId)      => req(`/posts/generateAIImage/${businessId}`, { method: "POST" }),
   listPosts:       (businessId, status) =>
                                         req(`/posts/business/${businessId}${status ? `?status=${status}` : ""}`),
-  updatePost:      (id, data)        => req(`/posts/${id}`,                      { method: "PATCH", body: JSON.stringify(data) }),
+  updatePost:      (id, data, businessId) => req(`/posts/${id}?business_id=${businessId}`, { method: "PATCH", body: JSON.stringify(data) }),
   publishPost:     (id)              => req(`/posts/${id}/publish`,              { method: "POST" }),
   fetchInsights:   (id)              => req(`/posts/${id}/insights`,             { method: "POST" }),
   deletePost:       (postId)         => req(`/posts/${postId}`, { method: "DELETE" }),

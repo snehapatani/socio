@@ -116,7 +116,7 @@ const canGenerateSingle = singlesLimit > 0 && singlesUsed < singlesLimit;
 
   async function saveEdit() {
     try {
-      await api.updatePost(editPost.id, { caption: editPost.caption });
+      await api.updatePost(editPost.id, { caption: editPost.caption }, businessId);
       setEditPost(null);
       await load();
       setToast({ msg: "Caption saved" });
