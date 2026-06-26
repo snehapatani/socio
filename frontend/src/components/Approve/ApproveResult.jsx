@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import Logo from "../Common/Logo";
 
 const VARIANTS = {
@@ -50,16 +51,78 @@ const VARIANTS = {
     body: "This approval link doesn't exist or has been revoked. Contact your Socio manager for a new one.",
     cta: null,
   },
+  processing: {
+    icon: (
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#6C47FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <circle cx="12" cy="12" r="6" fill="#6C47FF" opacity="0.2" />
+      </svg>
+    ),
+    iconBg: "bg-[#EDE9FE]",
+    heading: () => "Processing approval...",
+    body: "Hang tight, we're approving your posts.",
+    cta: null,
+  },
 };
 
 export default function ApproveResult() {
-  const path   = window.location.pathname;           // e.g. /approve/success
+  const path   = window.location.pathname;
   const params = new URLSearchParams(window.location.search);
   const count  = params.get("count") || "0";
+  const segment = path.split("/").filter(Boolean).pop();
 
-  // Derive variant from the last path segment
-  const segment = path.split("/").filter(Boolean).pop(); // "success" | "expired" | …
-  const variant = VARIANTS[segment] ?? VARIANTS.invalid;
+  const [variant, setVariant] = useState(VARIANTS[segment] ? segment : null);
+
+  useEffect(() => {
+    console.log("APPROVE_EFFECT: segment=", segment);
+    console.log("APPROVE_EFFECT: is known variant?", !!VARIANTS[segment]);
+    console.log("APPROVE_EFFECT: VITE_API_URL=", import.meta.env.VITE_API_URL);
+
+    // If segment is a known result variant, show it directly
+    if (VARIANTS[segment]) {
+      console.log("APPROVE_EFFECT: showing known variant");
+      setVariant(segment);
+      return;
+    }
+
+    // Otherwise, it's a token — send it to the backend
+    const token = segment;
+    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+    const fetchUrl = `${apiUrl}/approve/${token}`;
+
+    console.log("APPROVE_EFFECT: token=", token);
+    console.log("APPROVE_EFFECT: fetching from", fetchUrl);
+
+    setVariant("processing");
+
+    fetch(fetchUrl)
+      .then(res => {
+        console.log("APPROVE_EFFECT: fetch response status=", res.status);
+        console.log("APPROVE_EFFECT: response url=", res.url);
+        // Backend redirects; follow the redirect path
+        const redirectUrl = res.url;
+        const redirectPath = new URL(redirectUrl).pathname;
+        const resultSegment = redirectPath.split("/").filter(Boolean).pop();
+
+        console.log("APPROVE_EFFECT: redirect path=", redirectPath, "segment=", resultSegment);
+
+        // Set the variant and update URL query params if needed
+        const searchParams = new URLSearchParams(redirectUrl.split("?")[1] || "");
+        if (searchParams.has("count")) {
+          window.history.replaceState({}, "", `${redirectPath}?count=${searchParams.get("count")}`);
+        } else {
+          window.history.replaceState({}, "", redirectPath);
+        }
+
+        setVariant(resultSegment || "invalid");
+      })
+      .catch(err => {
+        console.error("APPROVE_EFFECT: fetch error", err);
+        setVariant("invalid");
+      });
+  }, [segment]);
+
+  const displayVariant = variant && VARIANTS[variant] ? variant : "invalid";
 
   return (
     <div className="relative min-h-screen bg-[#FAFAFF] flex flex-col items-center justify-center px-6 overflow-hidden">
@@ -74,8 +137,8 @@ export default function ApproveResult() {
         </div>
 
         {/* Icon */}
-        <div className={`w-20 h-20 rounded-2xl ${variant.iconBg} flex items-center justify-center mb-6 shadow-[0_4px_20px_-8px_rgba(108,71,255,0.18)]`}>
-          {variant.icon}
+        <div className={`w-20 h-20 rounded-2xl ${VARIANTS[displayVariant].iconBg} flex items-center justify-center mb-6 shadow-[0_4px_20px_-8px_rgba(108,71,255,0.18)]`}>
+          {VARIANTS[displayVariant].icon}
         </div>
 
         {/* Heading */}
@@ -83,7 +146,7 @@ export default function ApproveResult() {
           className="text-2xl font-bold text-[#2E1065] mb-3 leading-tight tracking-tight"
           style={{ fontFamily: "Sora, Inter, system-ui, sans-serif" }}
         >
-          {variant.heading(count)}
+          {VARIANTS[displayVariant].heading(count)}
         </h1>
 
         {/* Body */}
@@ -91,7 +154,7 @@ export default function ApproveResult() {
           className="text-sm text-[#7C3AED] leading-relaxed"
           style={{ fontFamily: "Sora, Inter, system-ui, sans-serif" }}
         >
-          {variant.body}
+          {VARIANTS[displayVariant].body}
         </p>
 
         {/* Powered-by footer */}
