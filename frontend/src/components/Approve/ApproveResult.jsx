@@ -74,13 +74,8 @@ export default function ApproveResult() {
   const [variant, setVariant] = useState(VARIANTS[segment] ? segment : null);
 
   useEffect(() => {
-    console.log("APPROVE_EFFECT: segment=", segment);
-    console.log("APPROVE_EFFECT: is known variant?", !!VARIANTS[segment]);
-    console.log("APPROVE_EFFECT: VITE_API_URL=", import.meta.env.VITE_API_URL);
-
     // If segment is a known result variant, show it directly
     if (VARIANTS[segment]) {
-      console.log("APPROVE_EFFECT: showing known variant");
       setVariant(segment);
       return;
     }
@@ -90,21 +85,14 @@ export default function ApproveResult() {
     const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
     const fetchUrl = `${apiUrl}/approve/${token}`;
 
-    console.log("APPROVE_EFFECT: token=", token);
-    console.log("APPROVE_EFFECT: fetching from", fetchUrl);
-
     setVariant("processing");
 
     fetch(fetchUrl)
       .then(res => {
-        console.log("APPROVE_EFFECT: fetch response status=", res.status);
-        console.log("APPROVE_EFFECT: response url=", res.url);
         // Backend redirects; follow the redirect path
         const redirectUrl = res.url;
         const redirectPath = new URL(redirectUrl).pathname;
         const resultSegment = redirectPath.split("/").filter(Boolean).pop();
-
-        console.log("APPROVE_EFFECT: redirect path=", redirectPath, "segment=", resultSegment);
 
         // Set the variant and update URL query params if needed
         const searchParams = new URLSearchParams(redirectUrl.split("?")[1] || "");
@@ -116,10 +104,7 @@ export default function ApproveResult() {
 
         setVariant(resultSegment || "invalid");
       })
-      .catch(err => {
-        console.error("APPROVE_EFFECT: fetch error", err);
-        setVariant("invalid");
-      });
+      .catch(() => setVariant("invalid"));
   }, [segment]);
 
   const displayVariant = variant && VARIANTS[variant] ? variant : "invalid";
